@@ -1,0 +1,26 @@
+# Deep Search Labeling Backend Dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY deep_search_labeling/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY deep_search_labeling/backend/ ./
+
+# Create database directory
+RUN mkdir -p database
+
+# Expose port
+EXPOSE 8002
+
+# Start the service
+CMD ["python", "start.py"]

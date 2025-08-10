@@ -1,0 +1,145 @@
+server:
+  host: "127.0.0.1"
+  port: 8001
+  workers: 1
+  max_concurrent_requests: 10
+
+ollama:
+  host: "http://localhost:11434"
+  default_model: "llama3.2:1b"
+  timeout: 30
+  max_retries: 3
+  
+  # Available models for different use cases
+  models:
+    fast: "llama3.2:1b"        # Ultra-fast inference
+    balanced: "llama3.2:3b"    # Good balance of speed/accuracy
+    accurate: "phi3:3.8b"      # Best reasoning capabilities
+    multilingual: "qwen2.5:3b" # Strong multilingual support
+    large: "llama3.1:8b"       # Highest accuracy
+
+languages:
+  supported:
+    - korean
+    - english
+    - chinese
+    - japanese
+    - spanish
+    - french
+  
+  # Model preferences by language
+  model_preferences:
+    chinese: "llama3.2:1b"
+    japanese: "llama3.2:1b"
+    korean: "llama3.2:1b"
+    english: "llama3.2:1b"
+    spanish: "llama3.2:1b"
+    french: "llama3.2:1b"
+    universal: "llama3.2:1b"
+
+analysis:
+  context_window_size: 300
+  confidence_threshold: 0.7
+  max_text_length: 10000
+  
+  # Different analysis modes
+  modes:
+    fast: 
+      model: "llama3.2:1b"
+      max_tokens: 100
+      temperature: 0.1
+    
+    standard:
+      model: "llama3.2:3b"
+      max_tokens: 200
+      temperature: 0.2
+    
+    thorough:
+      model: "phi3:3.8b"
+      max_tokens: 300
+      temperature: 0.1
+
+# PII types and their analysis requirements
+pii_types:
+  high_risk:
+    - ssn
+    - credit_card
+    - id_number
+  
+  medium_risk:
+    - email
+    - phone
+    - address
+  
+  low_risk:
+    - name
+    - organization
+    - date
+    - postal_code
+
+# Context analysis prompts
+prompts:
+  base_system_prompt: |
+    You are a privacy expert analyzing text to identify genuine personally identifiable information (PII).
+    Your task is to determine if detected entities are real PII or false positives.
+    Consider context, intent, and privacy implications in your analysis.
+    
+  context_analysis: |
+    Analyze if "{entity}" is genuine personal information in this context:
+    
+    Text: "{text}"
+    Entity: "{entity}" (Type: {type})
+    
+    Is this likely to be real personal information (not fictional, example, or generic text)?
+    
+    Respond in JSON format:
+    {{"is_genuine_pii": true, "confidence": 0.8, "reason": "This appears to be a real person's name", "risk_level": "medium"}}
+  
+  false_positive_detection: |
+    Determine if this detected entity is a false positive:
+    
+    Text: "{text}"
+    Detected: "{entity}" as {type}
+    
+    Common false positives:
+    - Movie/book titles, fictional characters
+    - Company names in non-personal contexts  
+    - Technical terms, product names
+    - Example/placeholder text
+    - Historical references
+    
+    JSON response: {{"is_false_positive": boolean, "confidence": float, "explanation": string}}
+  
+  multilingual_context: |
+    Analyze this {language} text for genuine PII:
+    
+    Text: "{text}"
+    Entity: "{entity}" (Type: {type})
+    
+    Consider cultural and linguistic context specific to {language}.
+    Account for naming conventions, address formats, and privacy norms.
+    
+    JSON response: {{"is_genuine_pii": boolean, "cultural_context": string, "confidence": float}}
+
+# Performance tuning
+performance:
+  request_timeout: 30
+  connection_pool_size: 20
+  max_queue_size: 100
+  cache_enabled: true
+  cache_ttl: 300  # 5 minutes
+
+# Monitoring and logging
+monitoring:
+  enable_metrics: true
+  log_level: "INFO"
+  log_requests: true
+  log_responses: false  # Set to true for debugging
+  
+  health_check:
+    interval: 30
+    timeout: 5
+    
+  alerts:
+    error_rate_threshold: 0.05
+    latency_threshold: 1000  # milliseconds

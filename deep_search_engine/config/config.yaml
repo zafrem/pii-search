@@ -1,0 +1,49 @@
+server:
+  host: "127.0.0.1"
+  port: 8000
+  workers: 1
+
+models:
+  default_model: "bert-base-multilingual-cased"
+  model_path: "./models"
+  cache_size: 100
+  
+languages:
+  supported:
+    - korean
+    - english
+    - chinese
+    - japanese
+    - spanish
+    - french
+  
+  spacy_models:
+    korean: "ko_core_news_sm"
+    english: "en_core_web_sm"
+    chinese: "zh_core_web_sm"
+    japanese: "ja_core_news_sm"
+    spanish: "es_core_news_sm"
+    french: "fr_core_news_sm"
+
+pii_types:
+  - phone
+  - email
+  - ssn
+  - credit_card
+  - name
+  - address
+  - organization
+  - date
+  - id_number
+  - postal_code
+
+training:
+  batch_size: 16
+  learning_rate: 2e-5
+  epochs: 3
+  max_length: 512
+  
+detection:
+  confidence_threshold: 0.7
+  context_window: 50
+  max_text_length: 10000

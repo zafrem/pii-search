@@ -1,0 +1,9 @@
+{
+  "model": "llama3.2:1b",
+  "prompt": "Analyze if John Smith is genuine personal information in this context:\n\nText: My name is John Smith and I live in California\nEntity: John Smith (Type: name)\n\nIs this likely to be real personal information?\n\nRespond in JSON format: {\"is_genuine_pii\": true, \"confidence\": 0.8, \"reason\": \"Real name\", \"risk_level\": \"medium\"}",
+  "stream": false,
+  "options": {
+    "temperature": 0.1,
+    "top_p": 0.9
+  }
+}

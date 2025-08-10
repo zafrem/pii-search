@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  # Ollama Service
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: pii-search-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - pii-search-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Deep Search Engine
+  deep-search:
+    build:
+      context: .
+      dockerfile: Dockerfile.deep-search
+    container_name: pii-search-deep-search
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - PYTHONPATH=/app
+    networks:
+      - pii-search-network
+    volumes:
+      - deep_search_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Context Search Engine
+  context-search:
+    build:
+      context: .
+      dockerfile: Dockerfile.context-search
+    container_name: pii-search-context-search
+    ports:
+      - "8001:8001"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - OLLAMA_HOST=http://ollama:11434
+      - PYTHONPATH=/app
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - pii-search-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: pii-search-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DEEP_SEARCH_URL=http://deep-search:8000
+      - CONTEXT_SEARCH_URL=http://context-search:8001
+    depends_on:
+      deep-search:
+        condition: service_healthy
+      context-search:
+        condition: service_healthy
+    networks:
+      - pii-search-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: pii-search-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pii-search-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Deep Search Labeling (Optional)
+  labeling-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.labeling-backend
+    container_name: pii-search-labeling-backend
+    ports:
+      - "8002:8002"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8002
+      - PYTHONPATH=/app
+    networks:
+      - pii-search-network
+    volumes:
+      - labeling_data:/app/database
+    profiles:
+      - labeling
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  labeling-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.labeling-frontend
+    container_name: pii-search-labeling-frontend
+    ports:
+      - "3002:3002"
+    depends_on:
+      labeling-backend:
+        condition: service_healthy
+    networks:
+      - pii-search-network
+    profiles:
+      - labeling
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  pii-search-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
+    driver: local
+  deep_search_models:
+    driver: local
+  labeling_data:
+    driver: local
