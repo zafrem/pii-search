@@ -17,7 +17,7 @@ This application provides progressive PII detection with three specialized stage
 - **🎯 Binary Classification**: Simplified PII/Non-PII categorization for better ML accuracy
 
 ## Pre-view
-![Demo](./image/PIIScanner.gif)
+![Demo](./image/PII_Search.gif)
 
 ## Architecture
 
