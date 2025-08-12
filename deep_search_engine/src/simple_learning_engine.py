@@ -9,6 +9,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, accuracy_score
 import numpy as np
+import spacy
+import re
 
 from .config import config
 from .models import (
@@ -21,14 +23,16 @@ from .models import (
     TrainingRequest,
     ModelInfo
 )
+from .ner_segmentation import segment_text_with_ner
 
 logger = logging.getLogger(__name__)
 
 class SimpleLearningEngine:
-    """Simple ML Classification engine using scikit-learn for binary PII detection."""
+    """Simple ML Classification engine using scikit-learn for binary PII detection with NER-based noun extraction."""
     
     def __init__(self):
         self.model = None
+        self.nlp = None  # spaCy model for NER
         self.is_initialized = False
         self.model_path = "models/active/simple_classifier.pkl"
         self.training_data = []
@@ -39,9 +43,19 @@ class SimpleLearningEngine:
         self.model_manager = None  # Will be set by the API
     
     async def initialize(self):
-        """Initialize the simple learning engine."""
+        """Initialize the simple learning engine with NER capabilities."""
         try:
-            logger.info("Initializing Simple Learning Engine...")
+            logger.info("Initializing Simple Learning Engine with NER...")
+            
+            # Load spaCy model for NER
+            try:
+                self.nlp = spacy.load("en_core_web_sm")
+                logger.info("Loaded spaCy English model for NER")
+            except OSError:
+                logger.warning("spaCy English model not found, downloading...")
+                import subprocess
+                subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+                self.nlp = spacy.load("en_core_web_sm")
             
             # Try to load existing model
             if os.path.exists(self.model_path):
@@ -59,7 +73,7 @@ class SimpleLearningEngine:
     
     def is_ready(self) -> bool:
         """Check if the engine is ready to process requests."""
-        return self.is_initialized and self.model is not None
+        return self.is_initialized and self.model is not None and self.nlp is not None
     
     async def _load_model(self):
         """Load the trained model from disk."""
@@ -132,7 +146,7 @@ class SimpleLearningEngine:
     
     def is_ready(self) -> bool:
         """Check if the engine is ready to process requests."""
-        return self.is_initialized and self.model is not None
+        return self.is_initialized and self.model is not None and self.nlp is not None
     
     async def search(self, request: DeepSearchRequest) -> DeepSearchResponse:
         """Perform binary PII classification on the input text."""
@@ -167,131 +181,40 @@ class SimpleLearningEngine:
         return response
     
     def _segment_text(self, text: str) -> List[Dict[str, Any]]:
-        """Extract individual PII entities using pattern matching and NER-based approach."""
-        import re
-        
-        segments = []
-        
-        # Define PII patterns with their types
-        pii_patterns = [
-            (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'email'),  # Email
-            (r'\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b', 'phone'),  # Phone
-            (r'\b\d{3}-\d{2}-\d{4}\b', 'ssn'),  # SSN
-            (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', 'credit_card'),  # Credit Card
-            (r'\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b', 'name'),  # Names (2-3 words)
-            (r'\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Way|Place|Pl|Circle|Cir|Court|Ct)\b', 'address'),  # Addresses
-            (r'\b\d{5}(?:-\d{4})?\b', 'postal_code'),  # ZIP codes
-        ]
-        
-        # Extract entities using patterns
-        for pattern, pii_type in pii_patterns:
-            for match in re.finditer(pattern, text, re.IGNORECASE):
-                # Check for overlaps with existing segments
-                overlap = False
-                for existing in segments:
-                    if (match.start() < existing['end'] and match.end() > existing['start']):
-                        overlap_ratio = (min(match.end(), existing['end']) - max(match.start(), existing['start'])) / (match.end() - match.start())
-                        if overlap_ratio > 0.5:  # More than 50% overlap
-                            overlap = True
-                            break
-                
-                if not overlap:
-                    segments.append({
-                        'text': match.group().strip(),
-                        'start': match.start(),
-                        'end': match.end(),
-                        'type': pii_type,
-                        'pattern_matched': True
-                    })
-        
-        # Also look for organization names (companies, institutions)
-        org_patterns = [
-            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Inc|LLC|Corp|Corporation|Ltd|Limited|Company|Co|Group|Associates|Partners|Consulting|Services|Solutions|Systems|Technologies|Tech)\.?)\b',
-        ]
-        
-        for pattern in org_patterns:
-            for match in re.finditer(pattern, text):
-                # Check for overlaps
-                overlap = False
-                for existing in segments:
-                    if (match.start() < existing['end'] and match.end() > existing['start']):
-                        overlap_ratio = (min(match.end(), existing['end']) - max(match.start(), existing['start'])) / (match.end() - match.start())
-                        if overlap_ratio > 0.5:
-                            overlap = True
-                            break
-                
-                if not overlap:
-                    segments.append({
-                        'text': match.group().strip(),
-                        'start': match.start(),
-                        'end': match.end(),
-                        'type': 'organization',
-                        'pattern_matched': True
-                    })
-        
-        # Extract potential names that might not match the simple pattern
-        # Look for capitalized words that could be names
-        name_candidates = re.finditer(r'\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})+\b', text)
-        for match in name_candidates:
-            # Skip if already covered by other patterns
-            overlap = False
-            for existing in segments:
-                if (match.start() < existing['end'] and match.end() > existing['start']):
-                    overlap = True
-                    break
-            
-            if not overlap:
-                # Additional filtering for common non-name patterns
-                candidate_text = match.group().strip()
-                if not re.match(r'.*(Street|Avenue|Road|Drive|Lane|Boulevard|Company|Corporation|Inc|LLC).*', candidate_text, re.IGNORECASE):
-                    segments.append({
-                        'text': candidate_text,
-                        'start': match.start(),
-                        'end': match.end(),
-                        'type': 'name',
-                        'pattern_matched': False  # Less confident
-                    })
-        
-        # Sort segments by start position
-        segments.sort(key=lambda x: x['start'])
-        
-        return segments
+        """Extract individual words using NER, focusing on nouns and removing verbs/articles."""
+        return segment_text_with_ner(self.nlp, text)
     
     async def _classify_segment(self, segment: Dict[str, Any], threshold: float) -> Optional[PIIClassificationResult]:
-        """Classify a text segment as PII or non-PII."""
+        """Classify individual words/tokens as PII or non-PII using enhanced NER-based logic."""
         try:
             text = segment['text']
             pii_type = segment.get('type', 'unknown')
             pattern_matched = segment.get('pattern_matched', False)
+            pos_tag = segment.get('pos', 'UNKNOWN')
+            ent_type = segment.get('ent_type', 'NONE')
             
-            # If pattern matched, give it high confidence
-            if pattern_matched:
-                pii_probability = 0.95  # High confidence for pattern matches
-            else:
-                # Get ML model prediction probability
-                probabilities = self.model.predict_proba([text])[0]
-                classes = self.model.classes_
-                
-                # Find PII probability
-                pii_index = np.where(classes == 'pii')[0]
-                if len(pii_index) > 0:
-                    pii_probability = probabilities[pii_index[0]]
-                else:
-                    pii_probability = 0.0
+            # Enhanced classification logic for individual words
+            pii_probability = self._calculate_word_pii_probability(
+                text, pii_type, pattern_matched, pos_tag, ent_type
+            )
+            
+            # Apply additional word-level filters
+            if not self._is_valid_pii_word(text, pii_type, pos_tag):
+                return None
             
             # Only return if above threshold and classified as PII
             if pii_probability >= threshold:
                 return PIIClassificationResult(
-                    id=f"simple_{segment['start']}_{segment['end']}",
+                    id=f"ner_{segment['start']}_{segment['end']}",
                     text=text,
-                    type=pii_type,  # Include the PII type
+                    type=pii_type,
                     classification=PIIClassification.PII,
                     language="universal",
                     position=Position(start=segment['start'], end=segment['end']),
                     probability=float(pii_probability),
                     confidence_level=self._get_confidence_level(pii_probability),
-                    context=self._extract_context(text, segment['start'], segment['end']),
-                    sources=["simple_learning"]
+                    context=self._extract_context_for_word(text, segment['start'], segment['end']),
+                    sources=["ner_word_analysis"]
                 )
             
             return None
@@ -299,6 +222,135 @@ class SimpleLearningEngine:
         except Exception as e:
             logger.error(f"Classification failed for segment: {e}")
             return None
+    
+    def _calculate_word_pii_probability(self, text: str, pii_type: str, pattern_matched: bool, 
+                                      pos_tag: str, ent_type: str) -> float:
+        """Calculate PII probability for individual words using multiple signals."""
+        
+        # High confidence for pattern-matched items (emails, phones, etc.)
+        if pattern_matched and ent_type == 'PATTERN':
+            return 0.98
+        
+        # High confidence for NER-detected entities
+        if pattern_matched and ent_type != 'NONE' and ent_type != 'PATTERN':
+            return 0.90
+        
+        # Use ML model for ambiguous cases
+        try:
+            probabilities = self.model.predict_proba([text])[0]
+            classes = self.model.classes_
+            
+            pii_index = np.where(classes == 'pii')[0]
+            base_probability = probabilities[pii_index[0]] if len(pii_index) > 0 else 0.0
+        except:
+            base_probability = 0.0
+        
+        # Apply POS-based adjustments
+        pos_multiplier = self._get_pos_multiplier(pos_tag, pii_type)
+        adjusted_probability = base_probability * pos_multiplier
+        
+        # Apply type-specific boosts
+        type_boost = self._get_type_boost(text, pii_type)
+        final_probability = min(0.99, adjusted_probability + type_boost)
+        
+        return final_probability
+    
+    def _get_pos_multiplier(self, pos_tag: str, pii_type: str) -> float:
+        """Get multiplier based on POS tag relevance to PII type."""
+        multipliers = {
+            'PROPN': {  # Proper nouns
+                'name': 1.3,
+                'organization': 1.2,
+                'location': 1.2,
+                'unknown': 1.1
+            },
+            'NOUN': {   # Common nouns
+                'address': 1.2,
+                'organization': 1.1,
+                'location': 1.1,
+                'unknown': 1.0
+            },
+            'NUM': {    # Numbers
+                'phone': 1.3,
+                'ssn': 1.3,
+                'credit_card': 1.3,
+                'number': 1.2,
+                'unknown': 1.1
+            },
+            'ENTITY': { # Multi-word entities
+                'name': 1.4,
+                'organization': 1.3,
+                'location': 1.3,
+                'date': 1.3,
+                'unknown': 1.2
+            }
+        }
+        
+        return multipliers.get(pos_tag, {}).get(pii_type, 1.0)
+    
+    def _get_type_boost(self, text: str, pii_type: str) -> float:
+        """Get additional probability boost based on text characteristics."""
+        text_lower = text.lower()
+        
+        # Email patterns
+        if pii_type == 'email' and '@' in text:
+            return 0.2
+        
+        # Name patterns (capitalized words)
+        if pii_type == 'name' and text[0].isupper() and text[1:].islower():
+            return 0.15
+        
+        # Organization patterns
+        if pii_type == 'organization' and any(suffix in text_lower for suffix in 
+                                            ['inc', 'llc', 'corp', 'ltd', 'company', 'group']):
+            return 0.2
+        
+        # Phone number patterns
+        if pii_type == 'phone' and any(c.isdigit() for c in text):
+            digit_ratio = sum(c.isdigit() for c in text) / len(text)
+            return min(0.25, digit_ratio * 0.3)
+        
+        # Location indicators
+        if pii_type == 'location' and any(word in text_lower for word in 
+                                        ['street', 'ave', 'road', 'drive', 'city']):
+            return 0.15
+        
+        return 0.0
+    
+    def _is_valid_pii_word(self, text: str, pii_type: str, pos_tag: str) -> bool:
+        """Filter out words that are unlikely to be PII despite classification."""
+        text_lower = text.lower()
+        
+        # Filter out very short words (except specific patterns)
+        if len(text) < 2 and pii_type not in ['email', 'phone', 'ssn']:
+            return False
+        
+        # Filter out common stop words that might have been missed
+        common_non_pii = {
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 
+            'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 
+            'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let',
+            'put', 'say', 'she', 'too', 'use'
+        }
+        
+        if text_lower in common_non_pii:
+            return False
+        
+        # Filter out single letters (unless they could be initials in names)
+        if len(text) == 1 and not (text.isupper() and pii_type == 'name'):
+            return False
+        
+        # Filter out purely numeric strings that are too short for meaningful PII
+        if text.isdigit() and len(text) < 3:
+            return False
+        
+        return True
+    
+    def _extract_context_for_word(self, word: str, start: int, end: int, window: int = 30) -> str:
+        """Extract context around detected word with smaller window for individual words."""
+        # This is a simplified version since we don't have access to the full text here
+        # In a real implementation, you'd pass the full text to this method
+        return word  # For now, just return the word itself
     
     def _get_confidence_level(self, score: float) -> ConfidenceLevel:
         """Determine confidence level based on score."""

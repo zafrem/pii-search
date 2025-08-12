@@ -319,6 +319,18 @@ function App() {
           <div className="text-center text-sm text-gray-500">
             <p>PII Search - Protecting privacy through intelligent detection</p>
             <p className="mt-1">Supports Korean, English, Chinese, Japanese, Spanish, and French</p>
+            
+            {/* Feedback/Contact Button */}
+            <div className="mt-4 mb-2">
+              <a
+                href="mailto:zafrem@gmail.com?subject=PII Search Feedback"
+                className="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors duration-200 space-x-2"
+              >
+                <span>📧</span>
+                <span>Feedback/Contact</span>
+              </a>
+            </div>
+            
             <p className="mt-1">
               <a 
                 href="https://github.com/zafrem/pii-search" 

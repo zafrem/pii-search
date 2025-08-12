@@ -36,6 +36,15 @@ pii_types:
   - date
   - id_number
   - postal_code
+  - location
+  - number
+  - group
+  - event
+  - product
+  - title
+  - legal
+  - language
+  - unknown
 
 training:
   batch_size: 16
@@ -47,3 +56,28 @@ detection:
   confidence_threshold: 0.7
   context_window: 50
   max_text_length: 10000
+  
+ner_processing:
+  enabled: true
+  filter_pos_tags:
+    - "VERB"     # Filter out verbs
+    - "AUX"      # Filter out auxiliary verbs
+    - "ADP"      # Filter out adpositions (prepositions)
+    - "CONJ"     # Filter out conjunctions
+    - "CCONJ"    # Filter out coordinating conjunctions
+    - "SCONJ"    # Filter out subordinating conjunctions
+    - "DET"      # Filter out determiners (articles)
+    - "PART"     # Filter out particles
+  
+  include_pos_tags:
+    - "NOUN"     # Include nouns
+    - "PROPN"    # Include proper nouns
+    - "NUM"      # Include numbers
+  
+  min_word_length: 2
+  confidence_boosts:
+    pattern_match: 0.98
+    ner_entity: 0.90
+    proper_noun: 0.15
+    email_pattern: 0.20
+    organization_suffix: 0.20
