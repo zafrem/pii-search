@@ -2,10 +2,9 @@ import {
   BasicSearchItem, 
   BasicSearchResponse, 
   Language, 
-  PIIType, 
-  Position,
+  PIIType,
   ResultSummary,
-  SearchRequest 
+  SearchRequest
 } from '../../backend/src/types';
 import { getPatternsByLanguages } from '../patterns';
 import { generateId } from '../utils/helpers';
@@ -82,7 +81,7 @@ export class RuleBasedEngine {
 
         while ((match = regex.exec(text)) !== null) {
           const matchedText = match[0];
-          const position: Position = {
+          const originalPosition = {
             start: match.index,
             end: match.index + matchedText.length
           };
@@ -94,9 +93,9 @@ export class RuleBasedEngine {
             text: matchedText,
             type: pattern.type,
             language,
-            position,
+            position: originalPosition,
             isDetected,
-            source: 'regex_pattern'
+            source: `regex_pattern`
           };
 
           items.push(item);
@@ -111,6 +110,7 @@ export class RuleBasedEngine {
     return items;
   }
 
+
   private validateMatch(text: string, type: PIIType): boolean {
     try {
       switch (type) {
@@ -123,7 +123,8 @@ export class RuleBasedEngine {
         case 'ssn':
           return this.validateSSN(text);
         default:
-          return true;
+          // Basic validation for other types
+          return text.trim().length > 0;
       }
     } catch (error) {
       return false;

@@ -16,6 +16,7 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export type SearchStage = 1 | 2 | 3;
 
+
 export interface Position {
   start: number;
   end: number;
@@ -113,6 +114,7 @@ export interface SearchRequest {
   text: string;
   languages: Language[];
   maxCharacters?: number;
+  stage1Results?: BasicSearchResponse; // For passing Stage 1 results to Stage 2
 }
 
 export interface ContextSearchRequest extends SearchRequest {

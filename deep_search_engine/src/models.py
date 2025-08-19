@@ -30,11 +30,20 @@ class PIIClassificationResult:
     sources: List[str]
 
 @dataclass
+class Stage1Weight:
+    text: str
+    type: str
+    position: Position
+    weight: float
+    source: str
+
+@dataclass
 class DeepSearchRequest:
     text: str
     languages: List[str]
     max_characters: Optional[int] = 10000
     confidence_threshold: Optional[float] = 0.7
+    stage1_weights: Optional[List[Dict[str, Any]]] = None
 
 @dataclass
 class DeepSearchResponse:

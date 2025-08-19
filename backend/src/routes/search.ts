@@ -8,7 +8,7 @@ const router = Router();
 const ruleBasedEngine = RuleBasedEngine.getInstance();
 
 // Mock Deep Search implementation when engine is not available
-const generateMockDeepSearchResult = (text: string) => {
+const generateMockDeepSearchResult = (text: string, stage1Weights: any[] = []) => {
   // Simple sentence segmentation - split by sentence endings not in email addresses
   const sentences = text.split(/\.(?!\w+@|\w+\.\w+@)(?=\s|$)|[!?]+/).filter(s => s.trim().length > 0);
   const items = [];
@@ -21,9 +21,22 @@ const generateMockDeepSearchResult = (text: string) => {
     const startPos = text.indexOf(sentence, currentPos);
     
     if (startPos !== -1) {
-      // Enhanced PII detection based on patterns
+      // Enhanced PII detection based on patterns and Stage 1 weights
       const containsPII = /\b(name|email|phone|address|ssn|card|@[\w.-]+\.\w+|\d{3}-\d{2}-\d{4}|\d{3}-\d{3}-\d{4}|[A-Za-z]+\s+[A-Za-z]+(?=\s+(and|or|is|was)))\b/i.test(sentence);
-      const probability = containsPII ? 0.75 + Math.random() * 0.2 : 0.15 + Math.random() * 0.3;
+      
+      // Check if this sentence overlaps with any Stage 1 weights
+      let hasStage1Weight = false;
+      for (const weight of stage1Weights) {
+        if (sentence.toLowerCase().includes(weight.text.toLowerCase())) {
+          hasStage1Weight = true;
+          break;
+        }
+      }
+      
+      let probability = containsPII ? 0.75 + Math.random() * 0.2 : 0.15 + Math.random() * 0.3;
+      if (hasStage1Weight) {
+        probability = Math.min(0.95, probability + 0.25); // Boost probability for Stage 1 weighted items
+      }
       
       items.push({
         id: `mock_seg_${i}`,
@@ -49,7 +62,7 @@ const generateMockDeepSearchResult = (text: string) => {
   
   return {
     stage: 2,
-    method: 'ml_classification_mock',
+    method: `ml_classification_mock`,
     items,
     summary: {
       totalItems: items.length,
@@ -133,8 +146,23 @@ router.post('/basic', asyncHandler(async (req: Request, res: Response) => {
 router.post('/deep', asyncHandler(async (req: Request, res: Response) => {
   try {
     const searchRequest = validateSearchRequest(req.body);
+    const { stage1Results } = req.body; // Accept Stage 1 results as weights
     
-    // Call Deep Search Engine API
+    // Prepare stage 1 weights if available
+    let stage1Weights = [];
+    if (stage1Results && stage1Results.items) {
+      stage1Weights = stage1Results.items
+        .filter((item: any) => item.isDetected) // Only use detected items as weights
+        .map((item: any) => ({
+          text: item.text,
+          type: item.type,
+          position: item.position,
+          weight: 1.0, // Base weight for rule-based detections
+          source: 'stage1_rule_based'
+        }));
+    }
+    
+    // Call Deep Search Engine API with stage 1 weights
     const deepSearchResponse = await fetch('http://localhost:8000/search', {
       method: 'POST',
       headers: {
@@ -144,7 +172,8 @@ router.post('/deep', asyncHandler(async (req: Request, res: Response) => {
         text: searchRequest.text,
         languages: searchRequest.languages,
         confidence_threshold: 0.3,
-        max_characters: searchRequest.maxCharacters
+        max_characters: searchRequest.maxCharacters,
+        stage1_weights: stage1Weights // Pass stage 1 results as weights
       })
     });
 
@@ -179,20 +208,33 @@ router.post('/deep', asyncHandler(async (req: Request, res: Response) => {
     if ((error as Error).message.includes('fetch failed') || (error as Error).message.includes('ECONNREFUSED')) {
       console.warn('Deep Search engine not available, using mock implementation');
       
-      const searchRequest = validateSearchRequest(req.body);
-      const mockResult = generateMockDeepSearchResult(searchRequest.text);
-      
-      res.json({
-        success: true,
-        data: mockResult,
-        metadata: {
-          requestId: req.headers['x-request-id'] || 'unknown',
-          timestamp: new Date().toISOString(),
-          apiVersion: '1.0.0',
-          note: 'Mock implementation - Deep Search engine not running'
-        }
-      });
-      return;
+      try {
+        const searchRequest = validateSearchRequest(req.body);
+        console.log('Mock deep search - validated request:', { textLength: searchRequest.text.length, languages: searchRequest.languages });
+        
+        const { stage1Results } = req.body;
+        const stage1Weights = stage1Results?.items?.filter((item: any) => item.isDetected) || [];
+        console.log('Mock deep search - stage1 weights:', stage1Weights.length, 'items');
+        
+        const mockResult = generateMockDeepSearchResult(searchRequest.text, stage1Weights);
+        console.log('Mock deep search - generated result with', mockResult.items.length, 'items');
+        
+        res.json({
+          success: true,
+          data: mockResult,
+          metadata: {
+            requestId: req.headers['x-request-id'] || 'unknown',
+            timestamp: new Date().toISOString(),
+            apiVersion: '1.0.0',
+            note: 'Mock implementation - Deep Search engine not running'
+          }
+        });
+        console.log('Mock deep search - response sent successfully');
+        return;
+      } catch (mockError) {
+        console.error('Error in mock deep search implementation:', mockError);
+        throw createAPIError(`Mock deep search failed: ${(mockError as Error).message}`, 500);
+      }
     }
     
     if ((error as any).statusCode) {
@@ -208,12 +250,17 @@ router.post('/context', asyncHandler(async (req: Request, res: Response) => {
     const searchRequest = validateSearchRequest(req.body);
     const { previousDetections } = req.body;
     
-    // Debug logging
+    // Enhanced debug logging
     console.log('Context search request:', {
       textLength: searchRequest.text.length,
+      textPreview: searchRequest.text.substring(0, 100) + '...',
       languages: searchRequest.languages,
       previousDetectionsCount: previousDetections?.length || 0,
-      previousDetections: JSON.stringify(previousDetections, null, 2)
+      previousDetections: previousDetections?.map((d: any) => ({
+        text: d.text,
+        type: d.type,
+        position: d.position
+      }))
     });
     
     if (!previousDetections || !Array.isArray(previousDetections)) {

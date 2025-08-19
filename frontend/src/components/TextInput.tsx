@@ -1,84 +1,154 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
+  onSearch: () => void;
   disabled?: boolean;
-  placeholder?: string;
-  maxLength?: number;
   disabledReason?: 'loading' | 'search_active' | 'other';
+  isLoading?: boolean;
+  isExpanded?: boolean;
 }
 
 const TextInput: React.FC<TextInputProps> = ({
   value,
   onChange,
+  onSearch,
   disabled = false,
-  placeholder = "Enter text to analyze for PII...",
-  maxLength = 10000,
-  disabledReason = 'other'
+  disabledReason = 'other',
+  isLoading = false,
+  isExpanded = false
 }) => {
+  const [expanded, setExpanded] = useState(isExpanded);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (!expanded) {
+        // Don't prevent default - allow the newline to be created
+        setExpanded(true);
+        // Focus the textarea after expansion
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 100);
+      }
+      // If already expanded, allow normal Enter behavior for new lines
+    }
+  };
+
+  const handleSearch = () => {
+    if (!disabled && value.trim()) {
+      onSearch();
+    }
+  };
+
+  const getDisabledMessage = (): string => {
+    switch (disabledReason) {
+      case 'loading':
+        return 'Text input is disabled while search is in progress';
+      case 'search_active':
+        return 'Text input is disabled during active search session. Reset to enable editing.';
+      default:
+        return 'Text input is currently disabled';
+    }
+  };
+
+  useEffect(() => {
+    setExpanded(isExpanded);
+  }, [isExpanded]);
+
   const characterCount = value.length;
-  const isNearLimit = characterCount > maxLength * 0.9;
-  const isOverLimit = characterCount > maxLength;
+  const isNearLimit = characterCount > 9000;
+  const isOverLimit = characterCount > 10000;
 
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <label className="block text-sm font-medium text-gray-700">
-          Text to Analyze
-        </label>
-        <div className={`text-xs ${isOverLimit ? 'text-error' : isNearLimit ? 'text-warning' : 'text-gray-500'}`}>
-          {characterCount.toLocaleString()} / {maxLength.toLocaleString()} characters
-        </div>
-      </div>
-
+    <div className="w-full max-w-2xl mx-auto">
       <div className="relative">
         <textarea
+          ref={textareaRef}
+          rows={expanded ? 6 : 1}
+          className={`
+            w-full pr-16 px-4 py-3 border-2 rounded-full shadow-lg resize-none transition-all duration-300
+            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            ${expanded ? 'rounded-2xl' : 'rounded-full'}
+            ${disabled 
+              ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-300' 
+              : 'bg-white text-gray-900 border-gray-300 hover:border-gray-400'
+            }
+            ${isOverLimit ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}
+          `}
+          placeholder="Search for PII in your text..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyPress={handleKeyPress}
           disabled={disabled}
-          placeholder={placeholder}
-          rows={8}
-          className={`
-            w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none
-            ${disabled ? 'bg-gray-50 cursor-not-allowed' : 'bg-white'}
-            ${isOverLimit ? 'border-error focus:ring-red-500 focus:border-red-500' : 'border-gray-300'}
-          `}
-          style={{ minHeight: '200px' }}
+          maxLength={10000}
+          style={{
+            fontSize: expanded ? '14px' : '16px',
+            lineHeight: expanded ? '1.5' : '1.2'
+          }}
         />
         
-        {isOverLimit && (
-          <div className="absolute top-2 right-2">
-            <div className="bg-error text-white text-xs px-2 py-1 rounded">
-              Text too long
+        {/* Search Button */}
+        <button
+          onClick={handleSearch}
+          disabled={disabled || !value.trim() || isOverLimit}
+          className={`
+            absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors duration-200
+            ${disabled || !value.trim() || isOverLimit
+              ? 'text-gray-400 cursor-not-allowed' 
+              : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+            }
+          `}
+          title="Search for PII"
+        >
+          {isLoading ? (
+            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          )}
+        </button>
+
+        {/* Character Count */}
+        {expanded && (
+          <div className={`absolute bottom-2 right-16 text-xs ${isOverLimit ? 'text-red-500' : isNearLimit ? 'text-yellow-600' : 'text-gray-400'}`}>
+            {characterCount.toLocaleString()}/10,000
+          </div>
+        )}
+
+        {/* Disabled Overlay */}
+        {disabled && (
+          <div className={`absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center ${expanded ? 'rounded-2xl' : 'rounded-full'}`}>
+            <div className="bg-white px-3 py-2 rounded-lg shadow-lg border max-w-xs text-center">
+              <p className="text-sm text-gray-600">
+                {getDisabledMessage()}
+              </p>
             </div>
           </div>
         )}
       </div>
 
-      {isOverLimit && (
-        <p className="text-sm text-error">
-          Text exceeds maximum length of {maxLength.toLocaleString()} characters. 
-          Please reduce the text by {(characterCount - maxLength).toLocaleString()} characters.
-        </p>
-      )}
-
-      {disabled && disabledReason === 'search_active' && (
-        <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
-          <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-xs">i</span>
-          </div>
-          <p>
-            Text input is locked during search analysis. Click "Reset Search" to modify the text and start over.
-          </p>
+      {/* Hint text */}
+      {!expanded && !disabled && !value && (
+        <div className="text-center mt-2 text-sm text-gray-500">
+          Press Enter to expand or start typing to begin your PII search
         </div>
       )}
-      
-      {!disabled && value.length === 0 && (
-        <p className="text-sm text-gray-500">
-          Paste or type text containing potential PII data. Supported formats include:
-          phone numbers, emails, names, addresses, ID numbers, and more.
-        </p>
+
+      {/* Character limit warning */}
+      {expanded && isOverLimit && (
+        <div className="text-center mt-2 text-sm text-red-600">
+          Text exceeds maximum length. Please reduce by {(characterCount - 10000).toLocaleString()} characters.
+        </div>
+      )}
+
+      {/* Disabled info for search active */}
+      {disabled && disabledReason === 'search_active' && (
+        <div className="text-center mt-2 text-sm text-blue-600">
+          Text is locked during search analysis. Reset to modify.
+        </div>
       )}
     </div>
   );

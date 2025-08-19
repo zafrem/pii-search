@@ -16,7 +16,7 @@ const initialState: SearchState = {
   stage: 1,
   isLoading: false,
   text: '',
-  selectedLanguages: ['korean', 'english', 'chinese', 'japanese', 'spanish', 'french'],
+  selectedLanguages: ['korean', 'english', 'chinese', 'japanese', 'spanish', 'french'], // Always use all languages
   results: {},
   error: undefined
 };
@@ -28,9 +28,8 @@ export const useSearch = () => {
     setState(prev => ({ ...prev, text, error: undefined }));
   }, []);
 
-  const updateLanguages = useCallback((languages: Language[]) => {
-    setState(prev => ({ ...prev, selectedLanguages: languages, error: undefined }));
-  }, []);
+  // Language selection removed - always use all supported languages
+
 
   const validateSearchInput = (): boolean => {
     if (!state.text.trim()) {
@@ -38,10 +37,7 @@ export const useSearch = () => {
       return false;
     }
 
-    if (state.selectedLanguages.length === 0) {
-      setState(prev => ({ ...prev, error: 'Please select at least one language' }));
-      return false;
-    }
+    // Language validation removed - always use all supported languages
 
     if (state.text.length > 10000) {
       setState(prev => ({ ...prev, error: 'Text exceeds maximum length of 10,000 characters' }));
@@ -51,24 +47,45 @@ export const useSearch = () => {
     return true;
   };
 
-  const executeSearch = useCallback(async (stage: SearchStage) => {
-    if (!validateSearchInput()) return;
-
+  const executeSearch = useCallback(async (stage: SearchStage, currentState?: SearchState) => {
+    console.log(`executeSearch called for stage ${stage}`);
+    
+    // Use provided currentState or fallback to state (for backwards compatibility)
+    const workingState = currentState || state;
+    
     const request: SearchRequest = {
-      text: state.text,
-      languages: state.selectedLanguages,
+      text: workingState.text,
+      languages: workingState.selectedLanguages,
       maxCharacters: 10000
     };
+    
+    if (!workingState.text.trim()) {
+      setState(prev => ({ ...prev, error: 'Please enter text to analyze' }));
+      return;
+    }
 
+    if (workingState.text.length > 10000) {
+      setState(prev => ({ ...prev, error: 'Text exceeds maximum length of 10,000 characters' }));
+      return;
+    }
+    
+    console.log('Setting loading state to true');
     setState(prev => ({ ...prev, isLoading: true, error: undefined }));
 
     try {
+      console.log(`About to enter switch statement for stage ${stage}`);
       switch (stage) {
         case 1: {
+          // Clear all previous results to ensure isolation
+          setState(prev => ({
+            ...prev,
+            results: {} // Clear all previous results
+          }));
+          
           const result: BasicSearchResponse = await searchAPI.basic(request);
           setState(prev => ({
             ...prev,
-            results: { ...prev.results, stage1: result },
+            results: { stage1: result }, // Only set stage1 result
             stage: 2,
             isLoading: false
           }));
@@ -76,25 +93,59 @@ export const useSearch = () => {
         }
         
         case 2: {
-          const result: DeepSearchResponse = await searchAPI.deep(request);
-          setState(prev => ({
-            ...prev,
-            results: { ...prev.results, stage2: result },
-            stage: 3,
-            isLoading: false
-          }));
+          // Only proceed if stage1 is completed, pass stage1 results as weights
+          console.log('Checking stage1 results:', !!workingState.results.stage1);
+          console.log('Current workingState.results:', workingState.results);
+          if (!workingState.results.stage1) {
+            console.error('Stage 1 results not found when trying to proceed to stage 2');
+            throw new Error('Stage 1 must be completed before proceeding to Stage 2');
+          }
+          
+          console.log('Stage 2: About to call deep search API');
+          console.log('Stage 1 results to pass:', workingState.results.stage1);
+          
+          // Enhance request with Stage 1 results for weighting
+          const enhancedRequest = {
+            ...request,
+            stage1Results: workingState.results.stage1 // Pass stage1 results for weight calculation
+          };
+          
+          console.log('Enhanced request for deep search:', enhancedRequest);
+          
+          try {
+            console.log('About to call searchAPI.deep()');
+            const result: DeepSearchResponse = await searchAPI.deep(enhancedRequest);
+            console.log('Deep search API response received:', result);
+            setState(prev => ({
+              ...prev,
+              results: { ...prev.results, stage2: result },
+              stage: 3,
+              isLoading: false
+            }));
+            console.log('Stage 2 completed successfully, stage set to 3');
+          } catch (deepSearchError) {
+            console.error('Deep search API call failed:', deepSearchError);
+            setState(prev => ({ ...prev, isLoading: false }));
+            throw deepSearchError;
+          }
           break;
         }
         
         case 3: {
+          // Only proceed if stage2 is completed
+          if (!workingState.results.stage2) {
+            throw new Error('Stage 2 must be completed before proceeding to Stage 3');
+          }
+          
           // For context search, we need to pass previous detections from stage 2
-          const previousDetections = state.results.stage2?.items || [];
+          // But ensure we're using the current session's stage2 results only
+          const previousDetections = workingState.results.stage2?.items || [];
           
           // Debug logging
           console.log('Context search debug:', {
-            stage2Results: state.results.stage2,
+            stage2Results: workingState.results.stage2,
             previousDetectionsCount: previousDetections.length,
-            previousDetections: JSON.stringify(previousDetections, null, 2)
+            currentText: workingState.text
           });
           
           const contextRequest = {
@@ -111,6 +162,13 @@ export const useSearch = () => {
         }
       }
     } catch (error) {
+      console.error('Search failed:', error);
+      console.error('Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
+      
       let errorMessage = 'An unexpected error occurred';
       
       if (error instanceof APIError) {
@@ -128,19 +186,42 @@ export const useSearch = () => {
   }, [state.text, state.selectedLanguages]);
 
   const startBasicSearch = useCallback(() => {
+    // Always start fresh - clear any existing results
+    setState(prev => ({
+      ...prev,
+      results: {},
+      stage: 1,
+      error: undefined
+    }));
     executeSearch(1);
   }, [executeSearch]);
 
   const proceedToNextStage = useCallback(() => {
-    // Execute the current stage that the user wants to proceed to
+    // Execute the next stage based on current stage
+    console.log('proceedToNextStage called with state.stage:', state.stage);
+    console.log('state.results:', state.results);
+    
     if (state.stage === 2) {
-      executeSearch(2); // Deep Search
+      console.log('Executing deep search (stage 2)');
+      executeSearch(2, state); // Pass current state to avoid closure issue
     } else if (state.stage === 3) {
-      executeSearch(3); // Context Search
+      console.log('Executing context search (stage 3)');
+      executeSearch(3, state); // Pass current state to avoid closure issue
+    } else {
+      console.log('No action for current stage:', state.stage);
     }
-  }, [state.stage, executeSearch]);
+  }, [state.stage, executeSearch, state.results]);
 
   const resetSearch = useCallback(() => {
+    // Reset to initial state but preserve text
+    setState(prev => ({
+      ...initialState,
+      text: prev.text
+    }));
+  }, []);
+
+  const resetAll = useCallback(() => {
+    // Complete reset including text
     setState(initialState);
   }, []);
 
@@ -169,12 +250,12 @@ export const useSearch = () => {
 
   const canProceedToNext = useCallback((): boolean => {
     switch (state.stage) {
-      case 1: return false; // Always start with basic search
-      case 2: return !!state.results.stage1;
-      case 3: return !!state.results.stage2;
+      case 1: return false; // Cannot proceed from stage 1 (basic search is entry point)
+      case 2: return !!state.results.stage1 && !state.isLoading; // Can proceed to deep search if stage 1 is complete
+      case 3: return !!state.results.stage2 && !state.isLoading; // Can proceed to context search if stage 2 is complete
       default: return false;
     }
-  }, [state.stage, state.results]);
+  }, [state.stage, state.results, state.isLoading]);
 
   const hasResults = (): boolean => {
     return !!(state.results.stage1 || state.results.stage2 || state.results.stage3);
@@ -199,9 +280,9 @@ export const useSearch = () => {
     
     // Actions
     updateText,
-    updateLanguages,
     startBasicSearch,
     proceedToNextStage,
-    resetSearch
+    resetSearch,
+    resetAll
   };
 };

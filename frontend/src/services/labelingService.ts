@@ -24,6 +24,12 @@ class LabelingService {
    */
   async openLabelingSystem(data: LabelingData): Promise<void> {
     try {
+      // Check if labeling service is available
+      const isAvailable = await this.checkLabelingServiceAvailability();
+      if (!isAvailable) {
+        throw new Error('Labeling service is not available. Please start the labeling backend on port 8002.');
+      }
+
       // Create a new project or add to existing project in labeling system
       const projectData = {
         name: `PII Classification - ${new Date().toISOString()}`,
@@ -278,27 +284,55 @@ class LabelingService {
 
   /**
    * Listen for labeling completion and automatically submit training data
+   * Only runs when labeling service is available
    */
   setupPeriodicTrainingSync(): void {
-    // Set up periodic check for new labeled data
-    const checkInterval = 5 * 60 * 1000; // 5 minutes
-
-    setInterval(async () => {
-      try {
-        // Check for completed labeling projects
-        const response = await fetch(`${this.labelingBaseUrl}/api/projects?status=completed`);
-        
-        if (response.ok) {
-          const projects = await response.json();
-          
-          for (const project of projects.data || []) {
-            await this.processCompletedProject(project.id);
-          }
-        }
-      } catch (error) {
-        console.error('Error in periodic training sync:', error);
+    // Check if labeling service is available before setting up sync
+    this.checkLabelingServiceAvailability().then(isAvailable => {
+      if (!isAvailable) {
+        console.log('Labeling service not available, skipping periodic training sync');
+        return;
       }
-    }, checkInterval);
+
+      // Set up periodic check for new labeled data
+      const checkInterval = 5 * 60 * 1000; // 5 minutes
+
+      setInterval(async () => {
+        try {
+          // Check for completed labeling projects
+          const response = await fetch(`${this.labelingBaseUrl}/api/projects?status=completed`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          if (response.ok) {
+            const projects = await response.json();
+            
+            for (const project of projects.data || []) {
+              await this.processCompletedProject(project.id);
+            }
+          }
+        } catch (error) {
+          // Silently handle connection errors to avoid spamming console
+          console.debug('Labeling service not available for periodic sync');
+        }
+      }, checkInterval);
+    });
+  }
+
+  /**
+   * Check if labeling service is available
+   */
+  private async checkLabelingServiceAvailability(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.labelingBaseUrl}/api/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
@@ -306,6 +340,12 @@ class LabelingService {
    */
   async processCompletedProjects(): Promise<void> {
     try {
+      // Check if labeling service is available
+      const isAvailable = await this.checkLabelingServiceAvailability();
+      if (!isAvailable) {
+        throw new Error('Labeling service is not available. Please start the labeling backend on port 8002.');
+      }
+
       const response = await fetch(`${this.labelingBaseUrl}/api/projects?status=completed`);
       
       if (response.ok) {
@@ -314,6 +354,8 @@ class LabelingService {
         for (const project of projects.data || []) {
           await this.processCompletedProject(project.id);
         }
+        
+        console.log(`Processed ${projects.data?.length || 0} completed projects`);
       }
     } catch (error) {
       console.error('Error processing completed projects:', error);

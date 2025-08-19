@@ -149,7 +149,7 @@ class SimpleLearningEngine:
         return self.is_initialized and self.model is not None and self.nlp is not None
     
     async def search(self, request: DeepSearchRequest) -> DeepSearchResponse:
-        """Perform binary PII classification on the input text."""
+        """Perform binary PII classification on the input text with Stage 1 weight integration."""
         if not self.is_ready():
             raise RuntimeError("Simple Learning Engine not initialized")
         
@@ -157,13 +157,19 @@ class SimpleLearningEngine:
         
         detected_items = []
         
-        # Split text into segments for classification
-        segments = self._segment_text(request.text)
+        # Process Stage 1 weights if available
+        stage1_weights = self._process_stage1_weights(request.stage1_weights if request.stage1_weights else [])
+        
+        # Enhanced text segmentation - use word-based approach
+        segments = self._segment_text_enhanced(request.text)
         
         for segment in segments:
             if len(segment['text'].strip()) > 0:
-                classification_result = await self._classify_segment(
-                    segment, request.confidence_threshold
+                # Apply Stage 1 weights to influence classification
+                stage1_weight = self._find_stage1_weight(segment, stage1_weights)
+                
+                classification_result = await self._classify_segment_with_weights(
+                    segment, request.confidence_threshold, stage1_weight
                 )
                 if classification_result:
                     detected_items.append(classification_result)
@@ -183,6 +189,122 @@ class SimpleLearningEngine:
     def _segment_text(self, text: str) -> List[Dict[str, Any]]:
         """Extract individual words using NER, focusing on nouns and removing verbs/articles."""
         return segment_text_with_ner(self.nlp, text)
+    
+    def _segment_text_enhanced(self, text: str) -> List[Dict[str, Any]]:
+        """Enhanced text segmentation using NER-based word approach."""
+        return segment_text_with_ner(self.nlp, text)
+    
+    
+    def _map_ner_to_type(self, ner_type: str) -> str:
+        """Map NER entity type to PII type."""
+        mapping = {
+            'PERSON': 'name',
+            'ORG': 'organization',
+            'GPE': 'location',
+            'LOC': 'location',
+            'DATE': 'date'
+        }
+        return mapping.get(ner_type, 'unknown')
+    
+    def _process_stage1_weights(self, stage1_weights: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Process and normalize Stage 1 weights."""
+        processed_weights = []
+        
+        for weight in stage1_weights:
+            if 'text' in weight and 'position' in weight:
+                processed_weights.append({
+                    'text': weight['text'],
+                    'type': weight.get('type', 'unknown'),
+                    'start': weight['position']['start'],
+                    'end': weight['position']['end'],
+                    'weight': weight.get('weight', 1.0),
+                    'source': weight.get('source', 'stage1')
+                })
+        
+        logger.info(f"Processed {len(processed_weights)} Stage 1 weights")
+        return processed_weights
+    
+    def _find_stage1_weight(self, segment: Dict[str, Any], stage1_weights: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Find corresponding Stage 1 weight for a segment."""
+        segment_start = segment['start']
+        segment_end = segment['end']
+        segment_text = segment['text'].lower()
+        
+        for weight in stage1_weights:
+            # Check for text overlap or position overlap
+            weight_text = weight['text'].lower()
+            
+            # Exact text match
+            if segment_text == weight_text:
+                return weight
+            
+            # Position overlap
+            if (segment_start >= weight['start'] and segment_start < weight['end']) or \
+               (segment_end > weight['start'] and segment_end <= weight['end']) or \
+               (segment_start <= weight['start'] and segment_end >= weight['end']):
+                return weight
+            
+            # Partial text match (for character mode)
+            if segment_text in weight_text or weight_text in segment_text:
+                return weight
+        
+        return None
+    
+    async def _classify_segment_with_weights(self, segment: Dict[str, Any], threshold: float, stage1_weight: Optional[Dict[str, Any]] = None) -> Optional[PIIClassificationResult]:
+        """Classify segment with Stage 1 weight influence."""
+        try:
+            text = segment['text']
+            pii_type = segment.get('type', 'unknown')
+            pattern_matched = segment.get('pattern_matched', False)
+            pos_tag = segment.get('pos', 'UNKNOWN')
+            ent_type = segment.get('ent_type', 'NONE')
+            
+            # Calculate base probability
+            base_probability = self._calculate_word_pii_probability(
+                text, pii_type, pattern_matched, pos_tag, ent_type
+            )
+            
+            # Apply Stage 1 weight boost
+            final_probability = base_probability
+            if stage1_weight:
+                # Boost probability for items detected in Stage 1
+                weight_boost = stage1_weight['weight'] * 0.3  # 30% boost for rule-based matches
+                final_probability = min(0.99, base_probability + weight_boost)
+                
+                # Update PII type if Stage 1 had better type identification
+                if stage1_weight['type'] != 'unknown' and pii_type == 'unknown':
+                    pii_type = stage1_weight['type']
+                
+                logger.debug(f"Applied Stage 1 weight: {text} -> {base_probability:.3f} + {weight_boost:.3f} = {final_probability:.3f}")
+            
+            # Apply additional word-level filters
+            if not self._is_valid_pii_word(text, pii_type, pos_tag):
+                return None
+            
+            # Only return if above threshold and classified as PII
+            if final_probability >= threshold:
+                sources = ["ner_word_analysis"]
+                if stage1_weight:
+                    sources.append("stage1_weighted")
+                
+                return PIIClassificationResult(
+                    id=f"ner_{segment['start']}_{segment['end']}",
+                    text=text,
+                    type=pii_type,
+                    classification=PIIClassification.PII,
+                    language="universal",
+                    position=Position(start=segment['start'], end=segment['end']),
+                    probability=float(final_probability),
+                    confidence_level=self._get_confidence_level(final_probability),
+                    context=self._extract_context_for_word(text, segment['start'], segment['end']),
+                    sources=sources
+                )
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Classification failed for segment: {e}")
+            return None
     
     async def _classify_segment(self, segment: Dict[str, Any], threshold: float) -> Optional[PIIClassificationResult]:
         """Classify individual words/tokens as PII or non-PII using enhanced NER-based logic."""

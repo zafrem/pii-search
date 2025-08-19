@@ -12,6 +12,7 @@ export type PIIType =
 
 export type Language = 'korean' | 'english' | 'chinese' | 'japanese' | 'spanish' | 'french';
 
+
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export interface Position {

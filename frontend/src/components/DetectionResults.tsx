@@ -263,7 +263,7 @@ const DetectionResults: React.FC<DetectionResultsProps> = ({
               <span>Non-PII: {nonPiiCount}</span>
             </div>
             <div className="text-gray-600">
-              Processing Time: {data.processingTime?.toFixed(2)}s
+              Processing Time: {data.processingTime?.toFixed(2)}ms
             </div>
           </div>
         </div>
