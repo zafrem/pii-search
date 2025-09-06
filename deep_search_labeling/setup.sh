@@ -41,6 +41,19 @@ pip install --upgrade pip
 
 # Install requirements
 echo "Installing Python dependencies..."
+
+# Special handling for macOS pyarrow issues
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Detected macOS - installing dependencies with special handling..."
+    
+    # Try to install pyarrow with pre-built wheel first
+    echo "Attempting to install pyarrow with pre-built wheel..."
+    pip install --only-binary=pyarrow pyarrow || {
+        echo "⚠️  Warning: Could not install pyarrow. Some features may be limited."
+        echo "   You can still use the labeling system without pyarrow."
+    }
+fi
+
 pip install -r requirements.txt
 
 # Initialize database

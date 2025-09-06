@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, accuracy_score
 import numpy as np
-import spacy
+# import spacy  # Disabled for simplified setup
 import re
 
 from .config import config
@@ -47,15 +47,9 @@ class SimpleLearningEngine:
         try:
             logger.info("Initializing Simple Learning Engine with NER...")
             
-            # Load spaCy model for NER
-            try:
-                self.nlp = spacy.load("en_core_web_sm")
-                logger.info("Loaded spaCy English model for NER")
-            except OSError:
-                logger.warning("spaCy English model not found, downloading...")
-                import subprocess
-                subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-                self.nlp = spacy.load("en_core_web_sm")
+            # Initialize simple NLP (without spaCy for now)
+            self.nlp = None
+            logger.info("Simple NLP mode enabled (spaCy disabled)")
             
             # Try to load existing model
             if os.path.exists(self.model_path):
@@ -73,7 +67,7 @@ class SimpleLearningEngine:
     
     def is_ready(self) -> bool:
         """Check if the engine is ready to process requests."""
-        return self.is_initialized and self.model is not None and self.nlp is not None
+        return self.is_initialized and self.model is not None
     
     async def _load_model(self):
         """Load the trained model from disk."""
@@ -146,7 +140,7 @@ class SimpleLearningEngine:
     
     def is_ready(self) -> bool:
         """Check if the engine is ready to process requests."""
-        return self.is_initialized and self.model is not None and self.nlp is not None
+        return self.is_initialized and self.model is not None
     
     async def search(self, request: DeepSearchRequest) -> DeepSearchResponse:
         """Perform binary PII classification on the input text with Stage 1 weight integration."""

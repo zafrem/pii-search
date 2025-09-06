@@ -267,12 +267,66 @@ router.post('/context', asyncHandler(async (req: Request, res: Response) => {
       throw createAPIError('Previous detections are required for context search', 400);
     }
     
+    // Helper function to infer PII type from text content
+    const inferPiiType = (text: string): string => {
+      // Clean the text by removing punctuation for better pattern matching
+      const cleanText = text.replace(/[,.\s]+$/, ''); // Remove trailing punctuation and spaces
+      
+      // Phone number patterns - check clean text first
+      if (/^\d{3}-\d{3,4}-\d{4}$/.test(cleanText) || /^\d{10,11}$/.test(cleanText.replace(/[\s-]/g, ''))) {
+        return 'phone';
+      }
+      
+      // Email pattern
+      if (/@[\w.-]+\.\w+/.test(cleanText)) {
+        return 'email';
+      }
+      
+      // Credit card patterns
+      if (/^\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}$/.test(cleanText)) {
+        return 'credit_card';
+      }
+      
+      // SSN patterns
+      if (/^\d{3}-\d{2}-\d{4}$/.test(cleanText)) {
+        return 'ssn';
+      }
+      
+      // Address patterns (basic)
+      if (/\d+\s+\w+\s+(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane)/i.test(text)) {
+        return 'address';
+      }
+      
+      // Date patterns
+      if (/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}/.test(text)) {
+        return 'date';
+      }
+      
+      // Organization patterns (ends with Corp, Inc, LLC, etc.)
+      if (/(corp|corporation|inc|incorporated|llc|ltd|limited|company|co\.)$/i.test(text)) {
+        return 'organization';
+      }
+      
+      // Postal code patterns
+      if (/^\d{5}(-\d{4})?$/.test(text) || /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/.test(text)) {
+        return 'postal_code';
+      }
+      
+      // ID number patterns (generic)
+      if (/^[A-Z0-9]{5,20}$/.test(text.replace(/[\s-]/g, ''))) {
+        return 'id_number';
+      }
+      
+      // Default to name if no specific pattern matches
+      return 'name';
+    };
+
     // Transform previous detections to match Context Search Engine format
     const transformedDetections = previousDetections.map((detection: any, index: number) => ({
       id: detection.id || `ctx_det_${index}`,
       text: detection.text || '',
-      type: detection.type || 'name', // Default to name if type not specified
-      language: detection.language || 'english',
+      type: inferPiiType(detection.text || ''),
+      language: detection.language === 'universal' ? 'english' : (detection.language || 'english'),
       position: {
         start: detection.position?.start || 0,
         end: detection.position?.end || detection.text?.length || 0

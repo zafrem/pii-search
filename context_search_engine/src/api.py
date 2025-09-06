@@ -18,6 +18,7 @@ from .models import (
 )
 from .engine import ContextSearchEngine
 from .ollama_client import ollama_client
+from .huggingface_client import huggingface_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,23 +59,46 @@ async def health_check() -> Dict[str, Any]:
     """Health check endpoint."""
     try:
         # Check Ollama connectivity
-        async with ollama_client as client:
-            ollama_healthy = await client.health_check()
-            available_models = await client.list_models() if ollama_healthy else []
+        ollama_healthy = False
+        available_ollama_models = []
+        try:
+            async with ollama_client as client:
+                ollama_healthy = await client.health_check()
+                available_ollama_models = await client.list_models() if ollama_healthy else []
+        except Exception as e:
+            logger.warning(f"Ollama health check failed: {e}")
+        
+        # Check HuggingFace connectivity
+        huggingface_healthy = False
+        try:
+            async with huggingface_client as hf_client:
+                huggingface_healthy = await hf_client.health_check()
+        except Exception as e:
+            logger.warning(f"HuggingFace health check failed: {e}")
         
         # Get engine stats
         stats = engine.get_stats()
         
-        status = "healthy" if ollama_healthy and engine.is_ready() else "degraded"
+        # System is healthy if at least one model is available and engine is ready
+        status = "healthy" if (ollama_healthy or huggingface_healthy) and engine.is_ready() else "degraded"
         
         return {
             "status": status,
             "service": "context-search-engine",
             "version": "1.0.0",
             "timestamp": time.time(),
-            "ollama_connected": ollama_healthy,
-            "current_model": config.ollama_model,
-            "available_models": [model.name for model in available_models],
+            "models": {
+                "ollama": {
+                    "connected": ollama_healthy,
+                    "current_model": "llama3.2:1b" if ollama_healthy else None,
+                    "available_models": [model.name for model in available_ollama_models]
+                },
+                "huggingface": {
+                    "connected": huggingface_healthy,
+                    "model": "DistilBERT" if huggingface_healthy else None
+                }
+            },
+            "dual_model_enabled": ollama_healthy and huggingface_healthy,
             "engine_ready": engine.is_ready(),
             "uptime": stats.get("uptime", 0),
             "total_requests": stats.get("total_requests", 0),
@@ -92,11 +116,56 @@ async def health_check() -> Dict[str, Any]:
         }
 
 @app.get("/models")
-async def list_models() -> List[ModelStatus]:
-    """List available Ollama models."""
+async def list_models() -> Dict[str, Any]:
+    """List available models from both Ollama and HuggingFace."""
     try:
-        async with ollama_client as client:
-            return await client.list_models()
+        result = {
+            "ollama": [],
+            "huggingface": [],
+            "total_available": 0
+        }
+        
+        # Get Ollama models
+        try:
+            async with ollama_client as client:
+                ollama_models = await client.list_models()
+                result["ollama"] = [
+                    {
+                        "name": model.name,
+                        "status": model.status,
+                        "version": model.version,
+                        "size": model.size,
+                        "last_used": model.last_used,
+                        "provider": "ollama"
+                    }
+                    for model in ollama_models
+                ]
+        except Exception as e:
+            logger.warning(f"Failed to get Ollama models: {e}")
+        
+        # Get HuggingFace model info
+        try:
+            async with huggingface_client as hf_client:
+                if await hf_client.health_check():
+                    result["huggingface"] = [{
+                        "name": "DistilBERT",
+                        "status": "available",
+                        "version": "latest",
+                        "size": "unknown",
+                        "last_used": None,
+                        "provider": "huggingface",
+                        "description": "DistilBERT-based PII detection model"
+                    }]
+        except Exception as e:
+            logger.warning(f"Failed to get HuggingFace model info: {e}")
+        
+        result["total_available"] = len(result["ollama"]) + len(result["huggingface"])
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
     except Exception as e:
         logger.error(f"Error listing models: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -56,12 +56,6 @@ except Exception as e:
     print(f'NLTK punkt download failed: {e}')
 
 try:
-    nltk.download('punkt_tab', quiet=True)
-    print('NLTK punkt_tab downloaded successfully')
-except Exception as e:
-    print(f'NLTK punkt_tab download failed: {e}')
-
-try:
     nltk.download('stopwords', quiet=True)
     print('NLTK stopwords downloaded successfully')
 except Exception as e:

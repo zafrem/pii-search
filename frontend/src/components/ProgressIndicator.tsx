@@ -19,7 +19,7 @@ const stageInfo = {
   },
   3: {
     name: 'Context Search',
-    description: 'llama3.2:1b',
+    description: 'llama3.2:1b and DistilBERT',
     icon: '🎯'
   }
 };

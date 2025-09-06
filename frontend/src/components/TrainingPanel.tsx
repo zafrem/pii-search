@@ -61,7 +61,7 @@ const TrainingPanel: React.FC<TrainingPanelProps> = ({ onTrainingComplete, onMod
   const handleEngineToggle = async () => {
     setIsUpdatingEngine(true);
     try {
-      await labelingService.setEngineMode(useSimpleEngine);
+      await labelingService.setEngineMode(!useSimpleEngine);
       setUseSimpleEngine(!useSimpleEngine);
     } catch (error) {
       console.error('Failed to update engine mode:', error);

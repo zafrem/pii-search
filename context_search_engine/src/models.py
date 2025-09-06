@@ -61,7 +61,7 @@ class ContextSearchRequest(BaseModel):
     languages: List[str]
     previous_detections: List[DetectedEntity] = []
     analysis_mode: AnalysisMode = AnalysisMode.STANDARD
-    confidence_threshold: float = 0.7
+    confidence_threshold: float = 0.5
     max_characters: Optional[int] = 10000
 
 class ValidateEntityRequest(BaseModel):

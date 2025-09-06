@@ -219,10 +219,10 @@ function App() {
                       <button
                         onClick={() => setShowOllamaDebug(true)}
                         className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium flex items-center space-x-1"
-                        title="View questions asked to Ollama"
+                        title="View LLM Prompt API requests and responses"
                       >
-                        <span>🤖</span>
-                        <span>View Ollama Questions</span>
+                        <span>📝</span>
+                        <span>View LLM Prompt API</span>
                       </button>
                     </div>
                   </div>

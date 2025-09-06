@@ -1,15 +1,15 @@
 # Context Search Engine
 
-A context-aware PII validation engine powered by Ollama LLMs for Stage 3 analysis. This engine performs final validation, false positive filtering, and contextual analysis of detected PII entities.
+A context-aware PII validation engine powered by Ollama LLMs and HuggingFace models for Stage 3 analysis. This engine performs final validation, false positive filtering, and contextual analysis of detected PII entities.
 
 ## Features
 
-- 🧠 **LLM-powered context analysis** using Ollama
+- 🧠 **Dual-model analysis** using both Ollama LLMs and HuggingFace models
 - 🔍 **False positive detection** and filtering
 - 🌍 **Multi-language contextual understanding**
 - 📊 **Confidence refinement** based on surrounding context
-- 🛡️ **Privacy-preserving** local LLM inference
-- 🚀 **High-performance** async processing
+- 🛡️ **Privacy-preserving** local LLM inference + cloud-based DistilBERT
+- 🚀 **High-performance** async processing with parallel model execution
 
 ## Architecture
 
@@ -32,6 +32,11 @@ The Context Search Engine operates as the final stage (Stage 3) in the PII detec
    ollama pull qwen2.5:3b         # Multilingual support
    ```
 
+3. **HuggingFace API Token** (Optional but recommended):
+   - Sign up at [huggingface.co](https://huggingface.co)
+   - Generate an API token from your profile settings
+   - Set the `HUGGINGFACE_API_TOKEN` environment variable
+
 ### Installation
 
 1. **Install dependencies**:
@@ -52,6 +57,26 @@ The Context Search Engine operates as the final stage (Stage 3) in the PII detec
 
 ## Configuration
 
+### Dual-Model Architecture
+
+The engine now supports both Ollama (local) and HuggingFace (cloud) models running in parallel:
+
+**Ollama Models (Local)**:
+- Privacy-preserving local inference
+- No data sent outside your infrastructure
+- Contextual reasoning and language understanding
+
+**HuggingFace Models (Cloud)**:
+- Specialized PII detection model: `iiiorg/piiranha-v1-detect-personal-information`
+- DistilBERT-based classification
+- Complementary analysis for improved accuracy
+
+**Combined Analysis**:
+- Both models analyze entities simultaneously
+- Results are intelligently combined
+- Conservative approach when models disagree
+- Fallback to single model if one is unavailable
+
 ### Ollama Models
 
 The engine supports multiple Ollama models optimized for different use cases:
@@ -68,6 +93,9 @@ The engine supports multiple Ollama models optimized for different use cases:
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TIMEOUT=30
+
+# HuggingFace Configuration
+HUGGINGFACE_API_TOKEN=your_token_here  # Optional, for better rate limits
 
 # API Configuration
 CONTEXT_SEARCH_HOST=127.0.0.1

@@ -22,6 +22,8 @@ from .models import (
     ConfidenceLevel
 )
 from .ollama_client import ollama_client
+from .huggingface_client import huggingface_client
+from .local_huggingface_client import local_huggingface_client
 from .prompt_manager import PromptManager
 
 logger = logging.getLogger(__name__)
@@ -48,29 +50,63 @@ class ContextSearchEngine:
     async def initialize(self):
         """Initialize the context search engine."""
         try:
-            logger.info("Initializing Context Search Engine...")
+            logger.info("Initializing Context Search Engine with dual model support...")
             
             # Check Ollama connectivity
-            async with ollama_client as client:
-                if not await client.health_check():
-                    raise Exception("Ollama is not accessible")
-                
-                # Check if default model is available
-                if not await client.check_model_exists(config.ollama_model):
-                    logger.warning(f"Default model {config.ollama_model} not found, attempting to pull...")
-                    if not await client.pull_model(config.ollama_model):
-                        # If pulling fails, try to use any available model
-                        logger.warning(f"Failed to pull default model: {config.ollama_model}")
-                        available_models = await client.list_models()
-                        if available_models:
-                            fallback_model = available_models[0].name
-                            logger.info(f"Using fallback model: {fallback_model}")
-                            # Update config to use the fallback model
-                            config._config["ollama"]["default_model"] = fallback_model
-                        else:
-                            raise Exception(f"No models available in Ollama and failed to pull default model: {config.ollama_model}")
-                
-                logger.info(f"Using model: {config.ollama_model}")
+            ollama_available = False
+            try:
+                async with ollama_client as client:
+                    if await client.health_check():
+                        ollama_available = True
+                        # Check if default model is available
+                        if not await client.check_model_exists(config.ollama_model):
+                            logger.warning(f"Default model {config.ollama_model} not found, attempting to pull...")
+                            if not await client.pull_model(config.ollama_model):
+                                # If pulling fails, try to use any available model
+                                logger.warning(f"Failed to pull default model: {config.ollama_model}")
+                                available_models = await client.list_models()
+                                if available_models:
+                                    fallback_model = available_models[0].name
+                                    logger.info(f"Using fallback model: {fallback_model}")
+                                    # Update config to use the fallback model
+                                    config._config["ollama"]["default_model"] = fallback_model
+                                else:
+                                    logger.warning("No Ollama models available")
+                                    ollama_available = False
+                        
+                        if ollama_available:
+                            logger.info(f"Ollama model ready: {config.ollama_model}")
+            except Exception as e:
+                logger.warning(f"Ollama initialization failed: {e}")
+                ollama_available = False
+            
+            # Check HuggingFace connectivity (try local first, then API)
+            huggingface_available = False
+            try:
+                # Try local HuggingFace client first
+                async with local_huggingface_client as local_hf_client:
+                    if await local_hf_client.health_check():
+                        huggingface_available = True
+                        logger.info("Local HuggingFace model ready")
+                    else:
+                        # Fall back to API client
+                        async with huggingface_client as hf_client:
+                            if await hf_client.health_check():
+                                huggingface_available = True
+                                logger.info(f"HuggingFace API model ready: {hf_client.model_name}")
+            except Exception as e:
+                logger.warning(f"HuggingFace initialization failed: {e}")
+                huggingface_available = False
+            
+            # At least one model should be available
+            if not ollama_available and not huggingface_available:
+                raise Exception("Neither Ollama nor HuggingFace models are accessible")
+            
+            # Store availability status
+            self.ollama_available = ollama_available
+            self.huggingface_available = huggingface_available
+            
+            logger.info(f"Available models - Ollama: {ollama_available}, HuggingFace: {huggingface_available}")
             
             # Initialize prompt manager
             await self.prompt_manager.initialize()
@@ -142,9 +178,13 @@ class ContextSearchEngine:
                 items=refined_entities,
                 processing_time=processing_time,
                 model_info={
-                    "primary_model": config.ollama_model,
+                    "ollama_model": "llama3.2:1b" if self.ollama_available else "N/A",
+                    "huggingface_model": "DistilBERT" if self.huggingface_available else "N/A",
+                    "ollama_available": str(self.ollama_available),
+                    "huggingface_available": str(self.huggingface_available),
                     "analysis_mode": request.analysis_mode.value,
-                    "prompt_version": self.prompt_manager.version
+                    "prompt_version": str(self.prompt_manager.version),
+                    "dual_model_enabled": str(self.ollama_available and self.huggingface_available)
                 },
                 analysis_metadata={
                     "entities_analyzed": len(request.previous_detections),
@@ -252,7 +292,7 @@ class ContextSearchEngine:
             is_validated = (
                 analysis_result.is_genuine_pii and 
                 refined_probability >= threshold and
-                analysis_result.confidence >= 0.6
+                analysis_result.confidence >= 0.4
             )
             
             return RefinedEntity(
@@ -275,7 +315,57 @@ class ContextSearchEngine:
             raise
     
     async def _perform_context_analysis(self, text: str, entity: DetectedEntity, context: str, mode: AnalysisMode) -> ContextAnalysisResult:
-        """Perform deep context analysis using LLM."""
+        """Perform deep context analysis using both Ollama and HuggingFace models."""
+        ollama_result = None
+        huggingface_result = None
+        
+        # Run both models in parallel if available
+        tasks = []
+        
+        if self.ollama_available:
+            tasks.append(self._analyze_with_ollama(text, entity, context, mode))
+        
+        if self.huggingface_available:
+            tasks.append(self._analyze_with_huggingface(text, entity, context, mode))
+        
+        if not tasks:
+            # Fallback if no models are available
+            return ContextAnalysisResult(
+                is_genuine_pii=True,  # Conservative default
+                confidence=0.5,
+                reason="No models available for analysis",
+                risk_level=RiskLevel.MEDIUM
+            )
+        
+        try:
+            # Run analyses in parallel
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Analysis task {i} failed: {result}")
+                    continue
+                
+                if i == 0 and self.ollama_available:  # First task was Ollama
+                    ollama_result = result
+                elif (i == 1 and self.ollama_available) or (i == 0 and not self.ollama_available):  # HuggingFace task
+                    huggingface_result = result
+            
+            # Combine results from both models
+            return self._combine_analysis_results(ollama_result, huggingface_result, entity)
+            
+        except Exception as e:
+            logger.error(f"Context analysis failed: {e}")
+            return ContextAnalysisResult(
+                is_genuine_pii=True,  # Conservative default
+                confidence=0.5,
+                reason=f"Analysis failed: {str(e)}",
+                risk_level=RiskLevel.MEDIUM
+            )
+    
+    async def _analyze_with_ollama(self, text: str, entity: DetectedEntity, context: str, mode: AnalysisMode) -> Dict[str, Any]:
+        """Perform analysis using Ollama model."""
         try:
             # Get appropriate model for language
             model = config.get_model_for_language(entity.language)
@@ -309,10 +399,11 @@ class ContextSearchEngine:
                 "entity_type": entity.type.value,
                 "prompt": prompt,
                 "model": model,
-                "context": context
+                "context": context,
+                "engine": "ollama"
             })
             
-            # Analyze with LLM
+            # Analyze with Ollama
             async with ollama_client as client:
                 response = await client.analyze_json(
                     text=context,
@@ -323,34 +414,132 @@ class ContextSearchEngine:
                     start=entity.position.start,
                     end=entity.position.end
                 )
-                
+            
             # Store response for debugging
             self.debug_info["last_request_responses"].append({
                 "entity_id": entity.id,
                 "entity_text": entity.text,
+                "engine": "ollama",
                 "response": response
             })
             
-            # Parse response and create analysis result
-            return ContextAnalysisResult(
-                is_genuine_pii=response.get("is_genuine_pii", False),
-                confidence=response.get("confidence", 0.5),
-                reason=response.get("reason", ""),
-                risk_level=RiskLevel(response.get("risk_level", "medium")),
-                cultural_context=response.get("cultural_context"),
-                false_positive_indicators=response.get("false_positive_indicators", []),
-                privacy_implications=response.get("privacy_implications", "")
-            )
+            response["model_source"] = "ollama"
+            return response
             
         except Exception as e:
-            logger.error(f"Context analysis failed: {e}")
-            # Return default analysis result
-            return ContextAnalysisResult(
-                is_genuine_pii=True,  # Conservative default
-                confidence=0.5,
-                reason="Analysis failed, using conservative default",
-                risk_level=RiskLevel.MEDIUM
-            )
+            logger.error(f"Ollama analysis failed: {e}")
+            raise
+    
+    async def _analyze_with_huggingface(self, text: str, entity: DetectedEntity, context: str, mode: AnalysisMode) -> Dict[str, Any]:
+        """Perform analysis using HuggingFace model (local first, then API)."""
+        try:
+            # Try local HuggingFace client first
+            async with local_huggingface_client as local_hf_client:
+                if await local_hf_client.health_check():
+                    response = await local_hf_client.classify_text(
+                        text=text,
+                        entity_text=entity.text,
+                        entity_type=entity.type.value,
+                        context=context,
+                        start=entity.position.start,
+                        end=entity.position.end
+                    )
+                else:
+                    # Fall back to API client
+                    async with huggingface_client as hf_client:
+                        response = await hf_client.classify_text(
+                            text=text,
+                            entity_text=entity.text,
+                            entity_type=entity.type.value,
+                            context=context,
+                            start=entity.position.start,
+                            end=entity.position.end
+                        )
+            
+            # Store response for debugging
+            self.debug_info["last_request_responses"].append({
+                "entity_id": entity.id,
+                "entity_text": entity.text,
+                "engine": "huggingface",
+                "response": response
+            })
+            
+            response["model_source"] = "huggingface"
+            return response
+            
+        except Exception as e:
+            logger.error(f"HuggingFace analysis failed: {e}")
+            raise
+    
+    def _combine_analysis_results(self, ollama_result: Optional[Dict], huggingface_result: Optional[Dict], entity: DetectedEntity) -> ContextAnalysisResult:
+        """Combine results from both models into a single analysis result."""
+        # Initialize with default values - conservative approach
+        combined_is_genuine = True  # Conservative: assume genuine PII unless proven otherwise
+        combined_confidence = 0.5  # Moderate confidence when uncertain
+        combined_reason = []
+        combined_risk_level = "medium"
+        
+        # Process Ollama result
+        if ollama_result:
+            ollama_genuine = ollama_result.get("is_genuine_pii", False)
+            ollama_confidence = ollama_result.get("confidence", 0.0)
+            combined_reason.append(f"Ollama: {ollama_result.get('reason', 'No reason provided')} (confidence: {ollama_confidence:.3f})")
+            
+            combined_is_genuine = ollama_genuine
+            combined_confidence = ollama_confidence
+            combined_risk_level = ollama_result.get("risk_level", "medium")
+        
+        # Process HuggingFace result
+        if huggingface_result:
+            hf_genuine = huggingface_result.get("is_genuine_pii", False)
+            hf_confidence = huggingface_result.get("confidence", 0.0)
+            # Get the specific model name that was used
+            model_name = huggingface_result.get("model", "HuggingFace")
+            combined_reason.append(f"{model_name}: {huggingface_result.get('reason', 'No reason provided')} (confidence: {hf_confidence:.3f})")
+            
+            if ollama_result:
+                # Both models available - combine their decisions
+                # Use weighted average favoring the more confident model
+                ollama_confidence = ollama_result.get("confidence", 0.0)
+                
+                if hf_confidence > ollama_confidence:
+                    # Trust HuggingFace more
+                    combined_is_genuine = hf_genuine
+                    combined_confidence = (hf_confidence * 0.7) + (ollama_confidence * 0.3)
+                    combined_risk_level = huggingface_result.get("risk_level", "medium")
+                else:
+                    # Trust Ollama more, but incorporate HuggingFace
+                    combined_confidence = (ollama_confidence * 0.7) + (hf_confidence * 0.3)
+                
+                # If models disagree, be more conservative
+                if ollama_result.get("is_genuine_pii", False) != hf_genuine:
+                    combined_reason.append("⚠️  Models disagree - using conservative approach")
+                    combined_is_genuine = True  # Conservative: assume it's PII if in doubt
+                    combined_confidence = min(combined_confidence, 0.7)
+                    
+            else:
+                # Only HuggingFace available - be more conservative
+                if hf_genuine or hf_confidence > 0.3:  # Accept if HF thinks it's genuine OR has some confidence
+                    combined_is_genuine = True
+                    combined_confidence = max(hf_confidence, 0.5)  # Minimum confidence for conservative approach
+                else:
+                    combined_is_genuine = hf_genuine
+                    combined_confidence = hf_confidence
+                combined_risk_level = huggingface_result.get("risk_level", "medium")
+        
+        # Final reason combining both analyses
+        final_reason = " | ".join(combined_reason) if combined_reason else "No analysis available"
+        
+        return ContextAnalysisResult(
+            is_genuine_pii=combined_is_genuine,
+            confidence=combined_confidence,
+            reason=final_reason,
+            risk_level=RiskLevel(combined_risk_level),
+            cultural_context=ollama_result.get("cultural_context") if ollama_result else None,
+            false_positive_indicators=(ollama_result.get("false_positive_indicators", []) if ollama_result else []) + 
+                                    (huggingface_result.get("false_positive_indicators", []) if huggingface_result else []),
+            privacy_implications=ollama_result.get("privacy_implications", "") if ollama_result else ""
+        )
     
     def _extract_context(self, text: str, start: int, end: int, window: int) -> str:
         """Extract context around detected entity."""

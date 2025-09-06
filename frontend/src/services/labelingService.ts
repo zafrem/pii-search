@@ -50,11 +50,13 @@ class LabelingService {
       });
 
       if (!projectResponse.ok) {
-        throw new Error('Failed to create labeling project');
+        const errorText = await projectResponse.text();
+        console.error('Project creation failed:', errorText);
+        throw new Error(`Failed to create labeling project: ${projectResponse.status} ${errorText}`);
       }
 
       const project = await projectResponse.json();
-      const projectId = project.data.id;
+      const projectId = project.data?.id || project.id;
 
       // Add text sample to project
       const sampleData = {
@@ -72,11 +74,13 @@ class LabelingService {
       });
 
       if (!sampleResponse.ok) {
-        throw new Error('Failed to add sample to project');
+        const errorText = await sampleResponse.text();
+        console.error('Sample creation failed:', errorText);
+        throw new Error(`Failed to add sample to project: ${sampleResponse.status} ${errorText}`);
       }
 
       const sample = await sampleResponse.json();
-      const sampleId = sample.data.id;
+      const sampleId = sample.data?.id || sample.id;
 
       // Pre-populate with existing classifications if any
       if (data.segments && data.segments.length > 0) {
@@ -90,13 +94,17 @@ class LabelingService {
             notes: 'Auto-generated from Deep Search results'
           };
 
-          await fetch(`${this.labelingBaseUrl}/api/samples/${sampleId}/classifications`, {
+          const classResponse = await fetch(`${this.labelingBaseUrl}/api/samples/${sampleId}/entities`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(classificationData)
           });
+          
+          if (!classResponse.ok) {
+            console.warn(`Failed to add classification for segment: ${segment.text}`);
+          }
         }
       }
 

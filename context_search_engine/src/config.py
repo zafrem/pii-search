@@ -30,7 +30,7 @@ class Config:
             "ollama": {
                 "host": "http://localhost:11434",
                 "default_model": "llama3.2:1b",
-                "timeout": 60,
+                "timeout": 300,
                 "max_retries": 3
             },
             "analysis": {

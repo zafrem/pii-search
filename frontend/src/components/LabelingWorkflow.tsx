@@ -99,7 +99,8 @@ const LabelingWorkflow: React.FC<LabelingWorkflowProps> = ({
       
     } catch (error) {
       console.error('Failed to submit to labeling system:', error);
-      alert('Failed to open labeling system. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to open labeling system: ${errorMessage}\n\nPlease ensure the labeling service is running on http://localhost:8002`);
     } finally {
       setIsSubmitting(false);
     }

@@ -65,7 +65,7 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-800">
-            🤖 Ollama Questions & Responses
+            📝 LLM Prompt API - Requests & Responses
           </h2>
           <button
             onClick={onClose}
@@ -98,13 +98,13 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
                 <div className="text-sm text-gray-600 space-y-1">
                   <p><strong>Text analyzed:</strong> "{debugInfo.last_request_text.substring(0, 100)}..."</p>
                   <p><strong>Entities processed:</strong> {debugInfo.last_request_entities_count}</p>
-                  <p><strong>Questions sent to Ollama:</strong> {debugInfo.prompts_sent.length}</p>
+                  <p><strong>API requests sent to LLM:</strong> {debugInfo.prompts_sent.length}</p>
                 </div>
               </div>
 
               {debugInfo.prompts_sent.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  <p className="text-lg">No questions were sent to Ollama</p>
+                  <p className="text-lg">No API requests were sent to LLM</p>
                   <p className="text-sm mt-2">This usually means Stage 2 didn't detect any PII entities to validate</p>
                 </div>
               ) : (
@@ -118,7 +118,7 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
                       <div key={prompt.entity_id} className="border border-gray-200 rounded-lg">
                         <div className="bg-blue-50 px-4 py-3 rounded-t-lg">
                           <h4 className="font-medium text-blue-900">
-                            Question #{index + 1}: "{prompt.entity_text}" ({prompt.entity_type})
+                            API Request #{index + 1}: "{prompt.entity_text}" ({prompt.entity_type})
                           </h4>
                           <p className="text-sm text-blue-700 mt-1">
                             Model: {prompt.model} | Entity ID: {prompt.entity_id}
@@ -136,7 +136,7 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
 
                           {/* Prompt */}
                           <div>
-                            <h5 className="font-medium text-gray-700 mb-2">Question asked to Ollama:</h5>
+                            <h5 className="font-medium text-gray-700 mb-2">POST Request Payload:</h5>
                             <div className="bg-yellow-50 p-3 rounded text-sm">
                               <pre className="whitespace-pre-wrap">{prompt.full_prompt}</pre>
                             </div>
@@ -145,7 +145,7 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
                           {/* Response */}
                           {response && (
                             <div>
-                              <h5 className="font-medium text-gray-700 mb-2">Ollama's Response:</h5>
+                              <h5 className="font-medium text-gray-700 mb-2">API Response:</h5>
                               <div className="bg-green-50 p-3 rounded">
                                 <pre className="text-sm whitespace-pre-wrap">
                                   {JSON.stringify(response.response, null, 2)}
@@ -167,7 +167,7 @@ const OllamaDebugModal: React.FC<OllamaDebugModalProps> = ({ isOpen, onClose }) 
                   disabled={loading}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Refreshing...' : 'Refresh Debug Info'}
+                  {loading ? 'Refreshing...' : 'Refresh API Data'}
                 </button>
               </div>
             </div>
