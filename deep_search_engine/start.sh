@@ -80,6 +80,58 @@ except LookupError:
 print('NLTK initialization completed')
 "
 
+# Download Multilingual BERT model
+echo "🌍 Downloading Multilingual BERT model..."
+python -c "
+from transformers import BertTokenizer, BertForSequenceClassification
+import os
+
+model_name = 'bert-base-multilingual-cased'
+model_dir = 'models/multilingual-bert'
+
+print('Downloading Multilingual BERT tokenizer and model...')
+try:
+    # Download and cache the model
+    tokenizer = BertTokenizer.from_pretrained(model_name)
+    model = BertForSequenceClassification.from_pretrained(model_name)
+    
+    # Save to local directory
+    os.makedirs(model_dir, exist_ok=True)
+    tokenizer.save_pretrained(model_dir)
+    model.save_pretrained(model_dir)
+    
+    print('Multilingual BERT model downloaded and saved successfully')
+except Exception as e:
+    print(f'Multilingual BERT download failed: {e}')
+    print('Continuing without Multilingual BERT model')
+"
+
+# Download DeBERTa v3 model
+echo "🚀 Downloading DeBERTa v3 model..."
+python -c "
+from transformers import DebertaV2Tokenizer, DebertaV2ForSequenceClassification
+import os
+
+model_name = 'microsoft/deberta-v3-base'
+model_dir = 'models/deberta-v3'
+
+print('Downloading DeBERTa v3 tokenizer and model...')
+try:
+    # Download and cache the model
+    tokenizer = DebertaV2Tokenizer.from_pretrained(model_name)
+    model = DebertaV2ForSequenceClassification.from_pretrained(model_name)
+    
+    # Save to local directory
+    os.makedirs(model_dir, exist_ok=True)
+    tokenizer.save_pretrained(model_dir)
+    model.save_pretrained(model_dir)
+    
+    print('DeBERTa v3 model downloaded and saved successfully')
+except Exception as e:
+    print(f'DeBERTa v3 download failed: {e}')
+    print('Continuing without DeBERTa v3 model')
+"
+
 # Create necessary directories
 echo "📁 Creating directories..."
 mkdir -p models data/raw data/processed logs

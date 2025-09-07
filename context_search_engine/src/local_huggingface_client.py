@@ -1,5 +1,6 @@
 import logging
 import torch
+import os
 from typing import Dict, Any, Optional
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
@@ -7,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 class LocalHuggingFaceClient:
     def __init__(self):
+        # Set custom cache directory if specified in environment
+        self._set_cache_directory()
+        
         # Use a more compatible model for PII detection
         self.model_name = "microsoft/DialoGPT-medium"  # We'll use a different approach
         # Alternative: we'll use a general text classification model and adapt it
@@ -23,6 +27,34 @@ class LocalHuggingFaceClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         pass
+    
+    def _set_cache_directory(self):
+        """Set custom cache directory from environment variables."""
+        # Check for custom cache locations in environment
+        hf_home = os.getenv('HF_HOME')
+        transformers_cache = os.getenv('TRANSFORMERS_CACHE')
+        hf_hub_cache = os.getenv('HF_HUB_CACHE')
+        
+        if hf_home:
+            os.environ['HF_HOME'] = hf_home
+            logger.info(f"Using custom HF_HOME: {hf_home}")
+            
+        if transformers_cache:
+            os.environ['TRANSFORMERS_CACHE'] = transformers_cache
+            logger.info(f"Using custom TRANSFORMERS_CACHE: {transformers_cache}")
+            
+        if hf_hub_cache:
+            os.environ['HF_HUB_CACHE'] = hf_hub_cache
+            logger.info(f"Using custom HF_HUB_CACHE: {hf_hub_cache}")
+            
+        # Create directories if they don't exist
+        for cache_dir in [hf_home, transformers_cache, hf_hub_cache]:
+            if cache_dir and not os.path.exists(cache_dir):
+                try:
+                    os.makedirs(cache_dir, exist_ok=True)
+                    logger.info(f"Created cache directory: {cache_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to create cache directory {cache_dir}: {e}")
     
     def _load_model(self):
         """Load the model locally if not already loaded."""

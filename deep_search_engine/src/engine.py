@@ -26,6 +26,7 @@ from .models import (
     ModelInfo
 )
 from .simple_learning_engine import SimpleLearningEngine
+from .cascaded_pii_detector import CascadedPIIDetector
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ class DeepSearchEngine:
         self.tokenizers = {}
         self.nlp_models = {}
         self.simple_engine = SimpleLearningEngine()
+        self.cascaded_detector = CascadedPIIDetector()
         self.use_simple_engine = True  # Default to simple engine
+        self.use_cascaded_detection = False  # Enable cascaded detection mode
         self.is_initialized = False
         self.training_status = {"is_training": False, "progress": 0, "model": None}
     
@@ -46,6 +49,15 @@ class DeepSearchEngine:
             
             # Initialize simple learning engine first (default)
             await self.simple_engine.initialize()
+            
+            # Try to initialize cascaded detector
+            try:
+                await self.cascaded_detector.initialize()
+                self.use_cascaded_detection = True
+                logger.info("Cascaded PII detector initialized successfully")
+            except Exception as e:
+                logger.warning(f"Cascaded detector not available: {e}")
+                self.use_cascaded_detection = False
             
             # Try to load advanced models, but don't fail if they're not available
             try:
@@ -101,7 +113,11 @@ class DeepSearchEngine:
     
     def is_ready(self) -> bool:
         """Check if the engine is ready to process requests."""
-        return self.is_initialized and (self.simple_engine.is_ready() or self._has_advanced_models())
+        return self.is_initialized and (
+            self.simple_engine.is_ready() or 
+            self._has_advanced_models() or 
+            (self.use_cascaded_detection and self.cascaded_detector.is_initialized)
+        )
     
     def _has_advanced_models(self) -> bool:
         """Check if advanced models are loaded."""
@@ -114,7 +130,12 @@ class DeepSearchEngine:
         
         logger.info(f"Starting deep search for text length: {len(request.text)}")
         
-        # Use simple engine by default or if advanced models are not available
+        # Priority 1: Use cascaded detection if available
+        if self.use_cascaded_detection and self.cascaded_detector.is_initialized:
+            logger.info("Using Parallel Cascaded PII Detection (BERT + DeBERTa + Ollama)")
+            return await self._search_with_cascaded_detector(request, separate_results=False)
+        
+        # Priority 2: Use simple engine by default or if advanced models are not available
         if self.use_simple_engine or not self._has_advanced_models():
             logger.info("Using Simple Learning Engine for classification")
             return await self.simple_engine.search(request)
@@ -141,6 +162,84 @@ class DeepSearchEngine:
         
         logger.info(f"Deep search completed. Found {len(detected_entities)} entities")
         return response
+    
+    async def _search_with_cascaded_detector(self, request: DeepSearchRequest, separate_results: bool = False) -> DeepSearchResponse:
+        """Perform PII search using the cascaded detector."""
+        all_results = {}
+        detected_entities = []
+        
+        # Process with each requested language
+        for language in request.languages:
+            # Use the parallel cascaded detector
+            result_data = await self.cascaded_detector.detect_pii_parallel(
+                request.text, language, separate_results=separate_results
+            )
+            
+            if separate_results:
+                # Store separate results by language
+                all_results[language] = result_data
+                # Still collect all items for filtering
+                for model_name, model_data in result_data["model_results"].items():
+                    if model_data["status"] == "success":
+                        detected_entities.extend(model_data["results"])
+            else:
+                # Combined results
+                all_results[language] = result_data
+                detected_entities.extend(result_data["results"])
+        
+        # Filter by confidence threshold
+        filtered_entities = [
+            entity for entity in detected_entities 
+            if entity.probability >= request.confidence_threshold
+        ]
+        
+        if not separate_results:
+            # Remove duplicates and merge overlapping entities for combined results
+            filtered_entities = self._deduplicate_entities(filtered_entities)
+        
+        # Prepare model info
+        model_info = {
+            "primary_model": "parallel-cascaded-detection",
+            "models_used": ["multilingual-bert", "deberta-v3", "ollama-llm"],
+            "languages_processed": request.languages,
+            "method": "parallel-bert-deberta-ollama",
+            "separate_results": separate_results
+        }
+        
+        if separate_results:
+            # Add detailed results by model and language
+            model_info["detailed_results"] = all_results
+        else:
+            # Add summary information
+            model_info["model_summary"] = {}
+            for lang_results in all_results.values():
+                if "model_summary" in lang_results:
+                    for model, summary in lang_results["model_summary"].items():
+                        if model not in model_info["model_summary"]:
+                            model_info["model_summary"][model] = {"total_count": 0, "status": summary["status"]}
+                        model_info["model_summary"][model]["total_count"] += summary["count"]
+        
+        response = DeepSearchResponse(
+            items=filtered_entities,
+            model_info=model_info
+        )
+        
+        logger.info(f"Parallel cascaded search completed. Found {len(filtered_entities)} entities (separate_results={separate_results})")
+        return response
+    
+    async def search_with_separate_results(self, request: DeepSearchRequest) -> DeepSearchResponse:
+        """
+        Perform PII search with separate results from each model.
+        Returns results organized by model type for comparison and analysis.
+        """
+        if not self.is_ready():
+            raise RuntimeError("Engine not initialized")
+        
+        if not (self.use_cascaded_detection and self.cascaded_detector.is_initialized):
+            raise RuntimeError("Separate results only available with cascaded detection")
+        
+        logger.info(f"Starting separate results search for text length: {len(request.text)}")
+        return await self._search_with_cascaded_detector(request, separate_results=True)
     
     async def _process_language(self, text: str, language: str, threshold: float) -> List[PIIClassificationResult]:
         """Process text for a specific language."""
@@ -430,3 +529,31 @@ class DeepSearchEngine:
         """Switch between simple and advanced engine modes."""
         self.use_simple_engine = use_simple
         logger.info(f"Engine mode set to: {'Simple' if use_simple else 'Advanced'}")
+    
+    def set_cascaded_detection(self, enabled: bool):
+        """Enable or disable cascaded detection mode."""
+        if enabled and not self.cascaded_detector.is_initialized:
+            logger.warning("Cannot enable cascaded detection: detector not initialized")
+            return False
+        
+        self.use_cascaded_detection = enabled
+        logger.info(f"Cascaded detection {'enabled' if enabled else 'disabled'}")
+        return True
+    
+    def get_detection_status(self) -> Dict[str, Any]:
+        """Get current detection system status."""
+        return {
+            "simple_engine_ready": self.simple_engine.is_ready() if hasattr(self.simple_engine, 'is_ready') else False,
+            "cascaded_detection_ready": self.use_cascaded_detection and self.cascaded_detector.is_initialized,
+            "advanced_models_ready": self._has_advanced_models(),
+            "current_mode": (
+                "cascaded" if self.use_cascaded_detection and self.cascaded_detector.is_initialized
+                else "simple" if self.use_simple_engine
+                else "advanced"
+            ),
+            "available_models": {
+                "multilingual_bert": self.cascaded_detector.bert_model is not None if self.cascaded_detector else False,
+                "deberta_v3": self.cascaded_detector.deberta_model is not None if self.cascaded_detector else False,
+                "ollama": True  # Assume available, checked at runtime
+            }
+        }

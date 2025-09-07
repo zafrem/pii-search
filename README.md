@@ -1,24 +1,52 @@
 # PII Search
 
-A comprehensive multi-language PII (Personally Identifiable Information) detection system with 3-stage sequential execution using rule-based matching, ML binary classification, and LLM-powered context analysis.
+A comprehensive multi-language PII (Personally Identifiable Information) detection system with advanced parallel processing, cascaded detection models, and integrated data generation capabilities for training and testing.
 
 ## 🎯 Overview
 
-This application provides progressive PII detection with three specialized stages:
+This application provides multiple PII detection approaches with advanced AI models:
 
-1. **Stage 1: Basic Search** - Rule-based pattern matching using regex patterns
-2. **Stage 2: Deep Search** - ML binary classification with TF-IDF and Logistic Regression
-3. **Stage 3: Context Search** - LLM-powered context validation using Ollama
+1. **Basic Search** - Rule-based pattern matching using regex patterns
+2. **Cascaded AI Detection** - Parallel processing with Multilingual BERT → DeBERTa v3 → Ollama LLM
+3. **Simple Learning Engine** - Adaptive ML with continuous training capabilities
+4. **Data Generation System** - Faker-based PII data generation for training and testing
 
 ### ✨ Key Features
 
-- **Multi-language Support**: Korean, English, Chinese, Japanese, Spanish, French
-- **Sequential Processing**: 3-stage pipeline with accumulated results
-- **Interactive Labeling**: Sentence selection and annotation system for model training
-- **Privacy-First**: Local processing only, no external API calls
-- **Real-time Feedback**: Confidence scoring and detailed analytics
-- **Docker Support**: Full containerization with docker-compose
-- **Production Ready**: Health checks, logging, and monitoring
+#### 🧠 **Advanced AI Detection**
+- **Parallel Processing**: All AI models run simultaneously for maximum speed
+- **Cascaded Detection**: Multilingual BERT + DeBERTa v3 + Ollama LLM pipeline
+- **Model Comparison**: View separate results from each AI model
+- **Adaptive Learning**: Continuous model improvement from user feedback
+
+#### 🌍 **Multi-language Support**
+- **12+ Languages**: Korean, English, Chinese, Japanese, Spanish, French, German, Italian, Portuguese, Dutch, Russian, Arabic
+- **Locale-aware Generation**: Region-specific PII patterns and formats
+- **Unicode Support**: Full international character set compatibility
+
+#### 🎯 **Data Generation & Training**
+- **Faker-based Generation**: Realistic PII data using 23+ data types
+- **Regex Pattern Support**: Generate data matching any regular expression
+- **Template System**: Custom format generation with placeholders
+- **Bulk Import**: Direct integration with labeling system for training data
+
+#### 🏷️ **Comprehensive Labeling System**
+- **Interactive Annotation**: Advanced UI for PII labeling and training
+- **Export Formats**: HuggingFace, spaCy, CoNLL, JSON, CSV
+- **Quality Analytics**: Inter-annotator agreement and performance metrics
+- **Auto-annotation**: Pre-label generated data for faster training
+
+#### 🔒 **Privacy & Security**
+- **Local Processing**: All AI models run locally, no external API calls
+- **Memory Management**: Automatic cleanup of sensitive data
+- **GDPR/HIPAA Ready**: Privacy-by-design architecture
+- **Secure Defaults**: Conservative detection settings
+
+#### 🚀 **Production Features**
+- **Docker Containerization**: Full stack deployment with docker-compose
+- **Health Monitoring**: Comprehensive health checks and metrics
+- **API Documentation**: OpenAPI/Swagger documentation
+- **Scalable Architecture**: Microservices design for high availability
 
 ## 🚀 Demo
 
@@ -62,13 +90,19 @@ cd backend && npm install && cd ..
 # 4. Install frontend dependencies
 cd frontend && npm install && cd ..
 
-# 5. Setup Python engines
+# 5. Setup Python engines (includes AI model downloads)
 cd deep_search_engine && ./setup.sh && cd ..
 cd context_search_engine && ./setup.sh && cd ..
 
-# 6. Install Ollama and models
+# 6. Setup labeling system (optional)
+cd deep_search_labeling && ./setup.sh && cd ..
+
+# 7. Install Ollama and models
 curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull llama3.2:3b
+
+# 8. Start Ollama service
+ollama serve
 ```
 
 ### Running the Application
@@ -142,48 +176,85 @@ docker-compose --profile labeling up --build
 
 ## 📚 Usage Guide
 
-### Basic Workflow
+### Detection Workflows
 
-1. **Text Input**: 
-   - Enter text (up to 10,000 characters)
-   - Select target languages for detection
-   - Configure detection parameters
+#### **Standard Detection Workflow**
+1. **Text Input**: Enter text (up to 10,000 characters) and select target languages
+2. **Basic Search**: Rule-based pattern matching for immediate results
+3. **Deep Search**: AI-powered detection with confidence scoring
+4. **Context Search**: LLM validation for final verification
 
-2. **Stage 1 - Basic Search**: 
-   - Click "Start Basic Search"
-   - Rule-based pattern matching
-   - Immediate results with basic PII types
+#### **Advanced AI Workflow** 
+1. **Parallel Detection**: All three AI models (BERT, DeBERTa, Ollama) run simultaneously
+2. **Combined Results**: Merged and deduplicated findings across all models
+3. **Separate Analysis**: View individual model results for comparison
+4. **Model Performance**: Compare accuracy and coverage across models
 
-3. **Stage 2 - Deep Search**: 
-   - Click "Continue to Deep Search"
-   - ML-powered classification
-   - Enhanced accuracy with probability scores
+#### **Data Generation Workflow**
+1. **Generate Training Data**: Create realistic PII data using Faker
+2. **Regex Generation**: Generate data matching custom patterns
+3. **Template Generation**: Use custom templates with placeholders
+4. **Bulk Import**: Import generated data into labeling projects
+5. **Auto-annotation**: Pre-label data for faster training
 
-4. **Stage 3 - Context Search**: 
-   - Click "Continue to Context Search"
-   - LLM analysis for context validation
-   - Final verification and confidence scoring
+#### **Training & Labeling Workflow**
+1. **Import Data**: Upload text samples or use generated data
+2. **Annotate PII**: Use interactive interface to label PII entities
+3. **Quality Control**: Review annotations and track quality metrics  
+4. **Export Training Data**: Export in multiple formats (HuggingFace, spaCy, etc.)
+5. **Model Training**: Retrain detection models with new data
 
 ### Supported PII Types
 
-- **Personal Names** (first, last, full names)
-- **Email Addresses** (various formats)
-- **Phone Numbers** (international formats)
-- **Social Security Numbers** (SSN)
-- **Credit Card Numbers**
-- **Addresses** (street, city, postal codes)
-- **Organizations** (company names)
-- **Dates** (birth dates, sensitive dates)
-- **ID Numbers** (various government IDs)
+#### **Personal Information**
+- **Names**: First name, last name, full name
+- **Contact Info**: Email addresses, phone numbers (international formats)
+- **Addresses**: Street address, city, state, zipcode, country
+- **Demographics**: Date of birth, age, gender
 
-### Language Support
+#### **Identification Numbers**
+- **Government IDs**: Social Security Numbers (SSN), driver licenses, passport numbers
+- **Financial**: Credit card numbers, bank account numbers, routing numbers  
+- **Medical**: Medical record numbers, patient IDs
+- **Employment**: Employee IDs, payroll numbers
+- **Other**: IP addresses, usernames, passwords
 
+#### **Generated Data Types** (23+ types for training)
+```
+name, first_name, last_name, email, phone, address, street_address, 
+city, state, zipcode, country, ssn, credit_card, date_of_birth, 
+driver_license, passport, ip_address, medical_record, employee_id, 
+bank_account, company, job_title, username, password
+```
+
+### Multi-Language Support
+
+#### **Detection Languages** (Pattern Matching + AI)
 - **Korean** (한국어) - Native pattern support
 - **English** - Comprehensive pattern library
 - **Chinese** (中文) - Simplified and Traditional
 - **Japanese** (日本語) - Hiragana, Katakana, Kanji
 - **Spanish** (Español) - Regional variations
 - **French** (Français) - European standard
+
+#### **Data Generation Locales** (Faker-based)
+- **English**: `en_US` - United States format
+- **Spanish**: `es_ES` - Spain format  
+- **French**: `fr_FR` - France format
+- **German**: `de_DE` - Germany format
+- **Italian**: `it_IT` - Italy format
+- **Japanese**: `ja_JP` - Japan format
+- **Chinese**: `zh_CN` - China format
+- **Korean**: `ko_KR` - Korea format
+- **Portuguese**: `pt_BR` - Brazil format
+- **Dutch**: `nl_NL` - Netherlands format
+- **Russian**: `ru_RU` - Russia format
+- **Arabic**: `ar_SA` - Saudi Arabia format
+
+#### **AI Model Language Support**
+- **Multilingual BERT**: 104+ languages with automatic detection
+- **DeBERTa v3**: Advanced multilingual understanding
+- **Ollama LLM**: Context-aware analysis in multiple languages
 
 ## 🏗️ Architecture
 
@@ -192,16 +263,63 @@ docker-compose --profile labeling up --build
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Backend       │    │  Deep Search    │
-│   React + TS    │◄──►│   Node.js + TS  │◄──►│  Python + ML    │
-│   Port: 3000    │    │   Port: 3001    │    │  Port: 8000     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
+│   React + TS    │◄──►│   Node.js + TS  │◄──►│   Engine        │
+│   Port: 3000    │    │   Port: 3001    │    │  (Multi-AI)     │
+└─────────────────┘    └─────────────────┘    │  Port: 8000     │
+                                │              └─────────────────┘
+                                │                       │
+                                ▼                       ▼
                        ┌─────────────────┐    ┌─────────────────┐
-                       │ Context Search  │    │     Ollama      │
-                       │ Python + LLM    │◄──►│   LLM Server    │
-                       │ Port: 8001      │    │  Port: 11434    │
-                       └─────────────────┘    └─────────────────┘
+                       │ Context Search  │    │   AI Models     │
+                       │ Python + LLM    │    │ BERT + DeBERTa  │
+                       │ Port: 8001      │    │   + Ollama      │
+                       └─────────────────┘    │  Port: 11434    │
+                                │              └─────────────────┘
+                                ▼              
+                       ┌─────────────────┐    
+                       │ Labeling System │    
+                       │  React + Python │    
+                       │  Port: 3002     │    
+                       │  Port: 8002     │    
+                       └─────────────────┘    
+```
+
+### Detection Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                           Text Input                            │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Detection Router                             │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
+│  │   Basic     │ │   Simple    │ │  Cascaded   │ │   Context   ││
+│  │   Search    │ │  Learning   │ │    AI       │ │   Search    ││
+│  │  (Regex)    │ │   (ML)      │ │  (Parallel) │ │   (LLM)     ││
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Cascaded AI Models                           │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │Multilingual │ │  DeBERTa    │ │   Ollama    │ ← Parallel     │
+│  │    BERT     │ │     v3      │ │    LLM      │   Processing   │
+│  │   (104+     │ │ (Advanced   │ │ (Context    │                │
+│  │ languages)  │ │  Analysis)  │ │ Analysis)   │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
+└─────────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            Result Processing & Deduplication                   │
+│  • Merge overlapping detections                                │
+│  • Confidence scoring                                          │
+│  • Model comparison                                            │
+│  • Export options                                              │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Technology Stack
@@ -219,23 +337,37 @@ docker-compose --profile labeling up --build
 - **Helmet** for security headers
 - **CORS** configuration
 
-#### Deep Search Engine
+#### Deep Search Engine (Enhanced AI)
 - **Python 3.8+** with FastAPI
-- **scikit-learn** for ML models
-- **TF-IDF** vectorization
-- **Logistic Regression** classification
-- **NLTK** for text processing
+- **Transformers** library for BERT/DeBERTa models
+- **Multilingual BERT** (`bert-base-multilingual-cased`)
+- **DeBERTa v3** (`microsoft/deberta-v3-base`)
+- **scikit-learn** for simple ML models
+- **PyTorch** for deep learning
+- **Async processing** for parallel execution
 
-#### Context Search Engine
+#### Context Search Engine  
 - **Python 3.8+** with FastAPI
-- **Ollama** integration for LLM
+- **Ollama** integration (`llama3.2:3b`)
 - **Transformers** library
-- **Async processing** for performance
+- **Async LLM processing**
+- **Context-aware analysis**
 
-#### Data Labeling System
-- **React** frontend for annotation
-- **Python** backend with SQLite
-- **Export formats**: HuggingFace, spaCy, JSON
+#### Data Generation System
+- **Faker** library for realistic data
+- **rstr** for regex-based generation
+- **23+ PII data types**
+- **12+ language locales**
+- **Template engine** for custom formats
+
+#### Data Labeling System (Enhanced)
+- **React** frontend with TypeScript
+- **Python FastAPI** backend with SQLAlchemy
+- **SQLite** database with migration support
+- **Export formats**: HuggingFace, spaCy, CoNLL, JSON, CSV
+- **Quality analytics**: Inter-annotator agreement metrics
+- **Auto-annotation**: Pre-labeling for generated data
+- **Bulk import/export** capabilities
 
 ## 📡 API Documentation
 
@@ -244,43 +376,170 @@ docker-compose --profile labeling up --build
 #### Search Operations
 ```http
 POST /api/search/basic
+POST /api/search/deep
+POST /api/search/context
 Content-Type: application/json
 
 {
   "text": "Hello, my name is John Doe",
   "languages": ["english"],
-  "maxCharacters": 10000
+  "maxCharacters": 10000,
+  "confidenceThreshold": 0.7
 }
 ```
 
-#### Health Check
+#### Health & Status
 ```http
 GET /api/health
+GET /api/status
 ```
 
-### Deep Search Engine API
+### Deep Search Engine API (Enhanced)
 
-#### Search Endpoint
+#### Standard Search
 ```http
 POST /search
 Content-Type: application/json
 
 {
   "text": "Sample text for analysis",
-  "stage1Results": { /* Basic search results */ }
+  "languages": ["english"],
+  "confidence_threshold": 0.7
 }
 ```
 
-### Context Search Engine API
-
-#### Context Analysis
+#### Parallel Cascaded Detection
 ```http
-POST /search
+POST /search/separate-results
 Content-Type: application/json
 
 {
   "text": "Text to analyze",
-  "previousDetections": [ /* Previous stage results */ ]
+  "languages": ["english"],
+  "confidence_threshold": 0.7
+}
+```
+
+#### Model Comparison
+```http
+POST /search/compare-models
+Content-Type: application/json
+
+{
+  "text": "Compare results across models",
+  "languages": ["english"]
+}
+```
+
+#### Detection Control
+```http
+POST /detection/set-cascaded
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+
+GET /detection/status
+```
+
+### Data Generation API
+
+#### Generate PII Data
+```http
+POST /data-generator/generate
+Content-Type: application/json
+
+{
+  "type": "email",
+  "count": 100,
+  "locale": "en_US"
+}
+
+# Regex-based generation
+{
+  "regex": "\\d{3}-\\d{2}-\\d{4}",
+  "count": 50
+}
+
+# Template-based generation
+{
+  "template": "Customer: {name}, Email: {email}",
+  "count": 25
+}
+```
+
+#### Bulk Import to Labeling
+```http
+POST /data-generator/bulk-import
+Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{
+  "project_id": "project-123",
+  "generation_config": {
+    "mixed_samples": true,
+    "count": 100
+  },
+  "auto_annotate": true
+}
+```
+
+#### Export Generated Data
+```http
+POST /data-generator/export
+Content-Type: application/json
+
+{
+  "generation_config": {
+    "type": "phone",
+    "count": 1000
+  },
+  "export_format": "csv",
+  "filename": "phone_numbers.csv"
+}
+```
+
+#### Get Supported Types
+```http
+GET /data-generator/types
+```
+
+### Labeling System API
+
+#### Project Management
+```http
+GET /projects
+POST /projects
+PUT /projects/{id}
+DELETE /projects/{id}
+```
+
+#### Sample Management
+```http
+GET /projects/{project_id}/samples
+POST /projects/{project_id}/samples
+GET /samples/{id}
+PUT /samples/{id}
+```
+
+#### Annotation Management
+```http
+GET /samples/{sample_id}/annotations
+POST /samples/{sample_id}/annotations
+PUT /annotations/{id}
+DELETE /annotations/{id}
+```
+
+#### Export Training Data
+```http
+POST /projects/{project_id}/export
+Content-Type: application/json
+
+{
+  "format": "huggingface",
+  "quality_threshold": 0.8,
+  "include_metadata": true
 }
 ```
 

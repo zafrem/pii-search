@@ -13,7 +13,7 @@ from .models import (
     ModelInfo,
     PIIClassificationResult
 )
-from .simple_learning_engine import SimpleLearningEngine
+from .engine import DeepSearchEngine
 from .model_manager import ModelManager
 
 # Configure logging
@@ -37,11 +37,8 @@ app.add_middleware(
 )
 
 # Initialize the deep search engine and model manager
-engine = SimpleLearningEngine()
+engine = DeepSearchEngine()
 model_manager = ModelManager()
-
-# Connect engine and model manager
-engine.set_model_manager(model_manager)
 
 @app.on_event("startup")
 async def startup_event():
@@ -294,6 +291,206 @@ async def rollback_model(rollback_data: Dict[str, str]):
         
     except Exception as e:
         logger.error(f"Failed to rollback model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Cascaded Detection Endpoints
+
+@app.post("/detection/set-cascaded")
+async def set_cascaded_detection(cascaded_data: Dict[str, Any]):
+    """Enable or disable cascaded detection mode."""
+    try:
+        enabled = cascaded_data.get("enabled", False)
+        success = engine.set_cascaded_detection(enabled)
+        
+        if not success:
+            return {
+                "success": False,
+                "message": "Cannot enable cascaded detection: detector not initialized",
+                "data": {
+                    "enabled": False,
+                    "reason": "detector_not_initialized"
+                }
+            }
+        
+        return {
+            "success": True,
+            "message": f"Cascaded detection {'enabled' if enabled else 'disabled'}",
+            "data": {
+                "enabled": enabled,
+                "timestamp": time.time()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to set cascaded detection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/detection/status")
+async def get_detection_status():
+    """Get current detection system status."""
+    try:
+        status = engine.get_detection_status()
+        
+        return {
+            "success": True,
+            "data": {
+                **status,
+                "timestamp": time.time()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get detection status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/search/separate-results")
+async def search_with_separate_results(request: DeepSearchRequest):
+    """Perform PII search with results separated by model type."""
+    start_time = time.time()
+    
+    try:
+        # Validate request
+        if not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        if not request.languages:
+            raise HTTPException(status_code=400, detail="At least one language must be specified")
+        
+        if len(request.text) > config.max_text_length:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Text exceeds maximum length of {config.max_text_length} characters"
+            )
+        
+        # Check if cascaded detection is available
+        if not (engine.use_cascaded_detection and engine.cascaded_detector.is_initialized):
+            raise HTTPException(
+                status_code=400, 
+                detail="Separate results only available with cascaded detection enabled"
+            )
+        
+        # Perform search with separate results
+        logger.info(f"Performing separate results search for {len(request.languages)} languages")
+        response = await engine.search_with_separate_results(request)
+        
+        processing_time = time.time() - start_time
+        response.processing_time = processing_time
+        
+        # Format response for separate results
+        return {
+            "success": True,
+            "data": {
+                "stage": response.stage,
+                "method": response.method,
+                "separate_results": True,
+                "model_details": response.model_info.get("detailed_results", {}),
+                "summary": {
+                    "total_items": len(response.items),
+                    "models_used": response.model_info.get("models_used", []),
+                    "languages_processed": response.model_info.get("languages_processed", []),
+                    "processing_time": processing_time
+                },
+                "combined_items": [
+                    {
+                        "id": item.id,
+                        "text": item.text,
+                        "classification": item.classification.value,
+                        "language": item.language,
+                        "position": {
+                            "start": item.position.start,
+                            "end": item.position.end
+                        },
+                        "probability": item.probability,
+                        "confidenceLevel": item.confidence_level.value,
+                        "sources": item.sources,
+                        "context": item.context
+                    }
+                    for item in response.items
+                ],
+                "modelInfo": response.model_info
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Search with separate results failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/search/compare-models")
+async def compare_model_results(request: DeepSearchRequest):
+    """Compare PII detection results across all three models."""
+    start_time = time.time()
+    
+    try:
+        # Validate request
+        if not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        if not request.languages:
+            raise HTTPException(status_code=400, detail="At least one language must be specified")
+        
+        # Check if cascaded detection is available
+        if not (engine.use_cascaded_detection and engine.cascaded_detector.is_initialized):
+            raise HTTPException(
+                status_code=400, 
+                detail="Model comparison only available with cascaded detection enabled"
+            )
+        
+        # Get separate results
+        response = await engine.search_with_separate_results(request)
+        processing_time = time.time() - start_time
+        
+        # Extract model comparison data
+        comparison_data = {}
+        detailed_results = response.model_info.get("detailed_results", {})
+        
+        for language, lang_data in detailed_results.items():
+            comparison_data[language] = {}
+            model_results = lang_data.get("model_results", {})
+            
+            for model_name, model_data in model_results.items():
+                if model_data["status"] == "success":
+                    results = model_data["results"]
+                    comparison_data[language][model_name] = {
+                        "count": len(results),
+                        "items": [
+                            {
+                                "text": item.text,
+                                "type": item.type,
+                                "probability": item.probability,
+                                "position": {"start": item.position.start, "end": item.position.end},
+                                "confidence_level": item.confidence_level.value
+                            }
+                            for item in results
+                        ],
+                        "status": "success"
+                    }
+                else:
+                    comparison_data[language][model_name] = {
+                        "count": 0,
+                        "items": [],
+                        "status": "failed",
+                        "error": model_data.get("error", "Unknown error")
+                    }
+        
+        return {
+            "success": True,
+            "data": {
+                "comparison": comparison_data,
+                "summary": {
+                    "total_processing_time": processing_time,
+                    "languages_analyzed": list(detailed_results.keys()),
+                    "models_compared": ["multilingual_bert", "deberta_v3", "ollama"],
+                    "text_length": len(request.text)
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Model comparison failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

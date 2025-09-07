@@ -11,6 +11,7 @@ from ..models.schemas import *
 from ..models.database import *
 # PIIEntity doesn't exist, using PIIClassification instead
 from ..auth.auth import get_current_user
+from ..data_generator import PIIDataGenerator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -298,6 +299,314 @@ def generate_id() -> str:
     """Generate a unique ID."""
     import uuid
     return str(uuid.uuid4())
+
+# Data Generation Endpoints
+
+@app.get("/data-generator/types")
+async def get_supported_pii_types():
+    """Get list of supported PII types for data generation."""
+    return {
+        "success": True,
+        "data": {
+            "supported_types": list(PIIDataGenerator.PII_TYPES.keys()),
+            "supported_locales": PIIDataGenerator.LOCALES
+        }
+    }
+
+@app.post("/data-generator/generate")
+async def generate_pii_data(request: Dict[str, Any]):
+    """
+    Generate PII data using various methods.
+    
+    Request body can contain:
+    - type: PII type to generate
+    - regex: Regular expression pattern 
+    - template: Template with placeholders
+    - mixed_samples: Boolean for mixed text samples
+    - count: Number of records (default: 10)
+    - locale: Locale for generation (default: en_US)
+    - format_template: Custom format template
+    """
+    try:
+        # Parse request parameters
+        pii_type = request.get('type')
+        regex_pattern = request.get('regex')
+        template = request.get('template')
+        mixed_samples = request.get('mixed_samples', False)
+        count = request.get('count', 10)
+        locale = request.get('locale', 'en_US')
+        format_template = request.get('format_template')
+        
+        # Validate parameters
+        if not any([pii_type, regex_pattern, template, mixed_samples]):
+            raise HTTPException(
+                status_code=400, 
+                detail="Must specify one of: type, regex, template, or mixed_samples"
+            )
+        
+        if count <= 0 or count > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail="Count must be between 1 and 1000"
+            )
+        
+        # Initialize generator
+        generator = PIIDataGenerator(locale)
+        
+        # Generate data based on method
+        if pii_type:
+            if pii_type not in PIIDataGenerator.PII_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported PII type: {pii_type}"
+                )
+            data = generator.generate_by_type(pii_type, count, format_template)
+            method = f"type_{pii_type}"
+            
+        elif regex_pattern:
+            data = generator.generate_by_regex(regex_pattern, count)
+            method = f"regex_{regex_pattern[:20]}..."
+            
+        elif template:
+            data = generator.generate_by_template(template, count)
+            method = f"template_{template[:30]}..."
+            
+        elif mixed_samples:
+            data = generator.generate_mixed_text_samples(count)
+            method = "mixed_samples"
+        
+        return {
+            "success": True,
+            "data": {
+                "method": method,
+                "count": len(data),
+                "locale": locale,
+                "records": data
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Data generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/data-generator/bulk-import")
+async def bulk_import_generated_data(
+    request: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate PII data and bulk import as text samples into a project.
+    
+    Request body:
+    - project_id: Target project ID
+    - generation_config: Data generation configuration
+    - auto_annotate: Whether to create pre-annotations (default: True)
+    """
+    try:
+        project_id = request.get('project_id')
+        generation_config = request.get('generation_config', {})
+        auto_annotate = request.get('auto_annotate', True)
+        
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        # Check if project exists and user has access
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Generate data
+        pii_type = generation_config.get('type')
+        regex_pattern = generation_config.get('regex')
+        template = generation_config.get('template')
+        mixed_samples = generation_config.get('mixed_samples', False)
+        count = generation_config.get('count', 10)
+        locale = generation_config.get('locale', 'en_US')
+        
+        generator = PIIDataGenerator(locale)
+        
+        if pii_type:
+            generated_data = generator.generate_by_type(pii_type, count)
+        elif regex_pattern:
+            generated_data = generator.generate_by_regex(regex_pattern, count)
+        elif template:
+            generated_data = generator.generate_by_template(template, count)
+        elif mixed_samples:
+            generated_data = generator.generate_mixed_text_samples(count)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Must specify generation method in generation_config"
+            )
+        
+        # Import as text samples
+        imported_samples = []
+        
+        for record in generated_data:
+            # Create text sample
+            if 'text' in record and 'annotations' in record:
+                # Mixed sample with annotations
+                text_content = record['text']
+                sample_annotations = record['annotations']
+            else:
+                # Simple value - create descriptive text
+                text_content = f"Generated {record.get('type', 'data')}: {record['value']}"
+                sample_annotations = [{
+                    'start': text_content.find(str(record['value'])),
+                    'end': text_content.find(str(record['value'])) + len(str(record['value'])),
+                    'text': str(record['value']),
+                    'type': record.get('type', 'unknown'),
+                    'classification': 'pii',
+                    'confidence': 1.0
+                }]
+            
+            # Create TextSample
+            text_sample = TextSample(
+                text=text_content,
+                project_id=project_id,
+                language=record.get('language', 'english'),
+                filename=f"generated_{record['id'][:8]}.txt",
+                status=SampleStatusEnum.PENDING
+            )
+            
+            db.add(text_sample)
+            db.flush()  # Get the ID
+            
+            # Create pre-annotations if requested
+            if auto_annotate:
+                for annotation in sample_annotations:
+                    pii_classification = PIIClassification(
+                        sample_id=text_sample.id,
+                        annotator_id=current_user['id'],
+                        start=annotation['start'],
+                        end=annotation['end'],
+                        text=annotation['text'],
+                        classification=PIIClassificationEnum.PII,
+                        confidence=annotation.get('confidence', 1.0),
+                        notes=f"Auto-generated from {record.get('type', 'unknown')} pattern"
+                    )
+                    db.add(pii_classification)
+            
+            imported_samples.append({
+                'sample_id': text_sample.id,
+                'text': text_content,
+                'annotations_count': len(sample_annotations)
+            })
+        
+        db.commit()
+        
+        # Update project sample counts
+        project.total_samples = db.query(TextSample).filter(
+            TextSample.project_id == project_id
+        ).count()
+        db.commit()
+        
+        return {
+            "success": True,
+            "data": {
+                "project_id": project_id,
+                "imported_count": len(imported_samples),
+                "method": "bulk_import",
+                "auto_annotate": auto_annotate,
+                "samples": imported_samples
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk import failed: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/data-generator/export")
+async def export_generated_data(request: Dict[str, Any]):
+    """
+    Generate and export PII data in various formats.
+    
+    Request body:
+    - generation_config: Data generation configuration
+    - export_format: Export format (json, csv, labeling)
+    - filename: Optional custom filename
+    """
+    try:
+        generation_config = request.get('generation_config', {})
+        export_format = request.get('export_format', 'json')
+        filename = request.get('filename')
+        
+        # Generate data
+        pii_type = generation_config.get('type')
+        regex_pattern = generation_config.get('regex')
+        template = generation_config.get('template')
+        mixed_samples = generation_config.get('mixed_samples', False)
+        count = generation_config.get('count', 10)
+        locale = generation_config.get('locale', 'en_US')
+        
+        generator = PIIDataGenerator(locale)
+        
+        if pii_type:
+            data = generator.generate_by_type(pii_type, count)
+            base_filename = f"generated_{pii_type}"
+        elif regex_pattern:
+            data = generator.generate_by_regex(regex_pattern, count)
+            base_filename = "generated_regex"
+        elif template:
+            data = generator.generate_by_template(template, count)
+            base_filename = "generated_template"
+        elif mixed_samples:
+            data = generator.generate_mixed_text_samples(count)
+            base_filename = "generated_mixed"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Must specify generation method in generation_config"
+            )
+        
+        # Generate filename if not provided
+        if not filename:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if export_format == 'json':
+                filename = f"{base_filename}_{timestamp}.json"
+            elif export_format == 'csv':
+                filename = f"{base_filename}_{timestamp}.csv"
+            elif export_format == 'labeling':
+                filename = f"{base_filename}_labeling_{timestamp}.json"
+        
+        # Export data
+        if export_format == 'json':
+            filepath = generator.export_to_json(data, f"exports/{filename}")
+        elif export_format == 'csv':
+            filepath = generator.export_to_csv(data, f"exports/{filename}")
+        elif export_format == 'labeling':
+            project_name = generation_config.get('project_name', 'Generated PII Data')
+            filepath = generator.export_for_labeling_system(
+                data, f"exports/{filename}", project_name
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported export format. Use: json, csv, or labeling"
+            )
+        
+        return {
+            "success": True,
+            "data": {
+                "filepath": filepath,
+                "format": export_format,
+                "record_count": len(data),
+                "download_url": f"/downloads/{filename}"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Export failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(

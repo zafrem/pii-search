@@ -36,3 +36,7 @@ flake8>=6.0.0
 
 # CORS and Security
 httpx>=0.24.0
+
+# Data Generation
+faker>=19.0.0
+rstr>=3.2.0

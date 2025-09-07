@@ -6,6 +6,8 @@ scikit-learn>=1.0.0
 # NLP Libraries (simplified)
 # spacy>=3.4.0  # Comment out spacy for now
 nltk>=3.7.0
+transformers>=4.21.0
+torch>=1.12.0
 
 # API Framework
 fastapi>=0.68.0
