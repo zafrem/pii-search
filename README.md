@@ -2,7 +2,7 @@
 
 A comprehensive multi-language PII (Personally Identifiable Information) detection system with advanced parallel processing, cascaded detection models, and integrated data generation capabilities for training and testing.
 
-## 🎯 Overview
+## Overview
 
 This application provides multiple PII detection approaches with advanced AI models:
 
@@ -11,16 +11,16 @@ This application provides multiple PII detection approaches with advanced AI mod
 3. **Simple Learning Engine** - Adaptive ML with continuous training capabilities
 4. **Data Generation System** - Faker-based PII data generation for training and testing
 
-### ✨ Key Features
+### Key Features
 
-- **🧠 Advanced AI Detection** - Parallel processing with cascaded models and adaptive learning
-- **🌍 Multi-language Support** - 12+ languages with locale-aware generation
-- **🎯 Data Generation & Training** - Faker-based generation with 23+ data types
-- **🏷️ Comprehensive Labeling System** - Interactive annotation with multiple export formats
-- **🔒 Privacy & Security** - Local processing with GDPR/HIPAA ready architecture
-- **🚀 Production Features** - Docker containerization with health monitoring
+- ** Advanced AI Detection** - Parallel processing with cascaded models and adaptive learning
+- ** Multi-language Support** - 12+ languages with locale-aware generation
+- ** Data Generation & Training** - Faker-based generation with 23+ data types
+- ** Comprehensive Labeling System** - Interactive annotation with multiple export formats
+- ** Privacy & Security** - Local processing with GDPR/HIPAA ready architecture
+- ** Production Features** - Docker containerization with health monitoring
 
-## 🚀 Demo
+## Demo
 
 ![Demo](./image/PII_Search.gif)
 
@@ -34,7 +34,7 @@ This application provides multiple PII detection approaches with advanced AI mod
 - [Security & Privacy](doc/security.md) - Security features and compliance
 - [Troubleshooting](doc/troubleshooting.md) - Common issues and solutions
 
-## 🚀 Quick Start
+## Quick Start
 
 **Prerequisites**: Node.js 16+, Python 3.8+, Ollama
 
@@ -60,13 +60,13 @@ npm run dev
 
 For complete setup instructions, see [Installation Guide](doc/installation.md).
 
-## 📄 License
+## License
 
 This project is dual-licensed under the MIT License and a Commercial License.
 - GNU General Public License v3.0 License: Free for open source and personal use - see the [LICENSE](LICENSE) file for details.
 - Commercial License: Required for commercial use, available via separate agreement Contact: zafrem@gmail.com
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Ollama** for local LLM capabilities
 - **Hugging Face** for transformer models
