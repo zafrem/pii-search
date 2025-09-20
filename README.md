@@ -62,7 +62,9 @@ For complete setup instructions, see [Installation Guide](doc/installation.md).
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+This project is dual-licensed under the MIT License and a Commercial License.
+- GNU General Public License v3.0 License: Free for open source and personal use - see the [LICENSE](LICENSE) file for details.
+- Commercial License: Required for commercial use, available via separate agreement Contact: zafrem@gmail.com
 
 ## 🙏 Acknowledgments
 
