@@ -65,6 +65,55 @@ export const englishPatterns: LanguagePatterns = {
       flags: 'g',
       description: 'US date formats (MM/DD/YYYY, MM-DD-YY)',
       examples: ['01/15/2023', '12-25-23', '3/4/2024']
+    },
+    {
+      type: 'bank_account' as PIIType,
+      pattern: '\\b\\d{8,17}\\b',
+      flags: 'g',
+      description: 'US bank account numbers',
+      examples: ['123456789012', '12345678']
+    },
+    {
+      type: 'tax_id' as PIIType,
+      pattern: '\\b\\d{2}-?\\d{7}\\b',
+      flags: 'g',
+      description: 'US Employer Identification Number (EIN)',
+      examples: ['12-3456789', '123456789']
+    },
+    {
+      type: 'passport' as PIIType,
+      pattern: '\\b[A-Z]{1,2}\\d{6,9}\\b',
+      flags: 'g',
+      description: 'US passport numbers',
+      examples: ['A12345678', 'AB1234567']
+    },
+    {
+      type: 'coordinates' as PIIType,
+      pattern: '\\b-?\\d{1,3}\\.\\d+[°]?[\\s,]+\\s*-?\\d{1,3}\\.\\d+[°]?',
+      flags: 'g',
+      description: 'Geographic coordinates (lat, lng)',
+      examples: ['40.7128, -74.0060', '34.0522°, -118.2437°']
+    },
+    {
+      type: 'date_of_birth' as PIIType,
+      pattern: '(?:DOB|born|birth date)\\s*:?\\s*\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}',
+      flags: 'gi',
+      description: 'Date of birth with context',
+      examples: ['DOB: 03/15/1990', 'born 3/15/1990']
+    },
+    {
+      type: 'iban' as PIIType,
+      pattern: 'US\\d{2}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}\\s?\\d{3}',
+      flags: 'gi',
+      description: 'US IBAN (hypothetical format)',
+      examples: ['US89 3704 0044 0532 0130 0000 123']
+    },
+    {
+      type: 'swift_code' as PIIType,
+      pattern: '[A-Z]{4}US[A-Z0-9]{2}(?:[A-Z0-9]{3})?',
+      flags: 'g',
+      description: 'US bank SWIFT codes',
+      examples: ['CHASUS33', 'BOFAUS3N001']
     }
   ],
   contextRules: [

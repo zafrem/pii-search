@@ -1,4 +1,4 @@
-export type PIIType = 
+export type PIIType =
   | 'phone'
   | 'email'
   | 'ssn'
@@ -8,7 +8,15 @@ export type PIIType =
   | 'organization'
   | 'date'
   | 'id_number'
-  | 'postal_code';
+  | 'postal_code'
+  | 'bank_account'
+  | 'national_id'
+  | 'passport'
+  | 'tax_id'
+  | 'coordinates'
+  | 'date_of_birth'
+  | 'iban'
+  | 'swift_code';
 
 export type Language = 'korean' | 'english' | 'chinese' | 'japanese' | 'spanish' | 'french';
 

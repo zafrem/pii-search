@@ -58,6 +58,48 @@ export const koreanPatterns: LanguagePatterns = {
       flags: 'gi',
       description: 'Email addresses (including Korean characters)',
       examples: ['김철수@naver.com', 'user@gmail.com', '홍길동@company.co.kr']
+    },
+    {
+      type: 'bank_account' as PIIType,
+      pattern: '\\b\\d{10,16}\\b',
+      flags: 'g',
+      description: 'Korean bank account numbers',
+      examples: ['1234567890123', '123456789012345']
+    },
+    {
+      type: 'national_id' as PIIType,
+      pattern: '\\d{6}-?[1-4]\\d{6}',
+      flags: 'g',
+      description: 'Korean resident registration number (주민등록번호)',
+      examples: ['123456-1234567', '9876541234567']
+    },
+    {
+      type: 'passport' as PIIType,
+      pattern: '[MPST]\\d{8}',
+      flags: 'g',
+      description: 'Korean passport numbers',
+      examples: ['M12345678', 'P87654321']
+    },
+    {
+      type: 'coordinates' as PIIType,
+      pattern: '(?:위도|lat|latitude)[:=]?\\s*\\d{2}\\.\\d+[°]?[\\s,]*(?:경도|lng|longitude)[:=]?\\s*1[23]\\d\\.\\d+[°]?',
+      flags: 'gi',
+      description: 'Korean geographic coordinates',
+      examples: ['위도: 37.5665, 경도: 126.9780', 'lat 35.1796, lng 129.0756']
+    },
+    {
+      type: 'date_of_birth' as PIIType,
+      pattern: '(?:생년월일|출생일|생일)[:=]?\\s*\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}',
+      flags: 'gi',
+      description: 'Korean date of birth',
+      examples: ['생년월일: 1990.03.15', '출생일 1985-12-25']
+    },
+    {
+      type: 'tax_id' as PIIType,
+      pattern: '\\d{3}-\\d{2}-\\d{5}',
+      flags: 'g',
+      description: 'Korean business registration number (사업자등록번호)',
+      examples: ['123-45-67890', '987-65-43210']
     }
   ],
   contextRules: [

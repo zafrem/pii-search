@@ -1,4 +1,4 @@
-export type PIIType = 
+export type PIIType =
   | 'phone'
   | 'email'
   | 'ssn'
@@ -8,12 +8,56 @@ export type PIIType =
   | 'organization'
   | 'date'
   | 'id_number'
-  | 'postal_code';
+  | 'postal_code'
+  | 'bank_account'
+  | 'national_id'
+  | 'passport'
+  | 'tax_id'
+  | 'coordinates'
+  | 'date_of_birth'
+  | 'iban'
+  | 'swift_code';
 
 export type Language = 'korean' | 'english' | 'chinese' | 'japanese' | 'spanish' | 'french';
 
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export type SensitivityLevel = 'High' | 'Moderate' | 'Low';
+export type RedactionStatus = 'masked' | 'raw';
+export type LegalBasis = 'consent' | 'contract' | 'legal_obligation';
+
+export interface Locale {
+  country: string;
+  language: string;
+  script: string;
+}
+
+export interface NormalizedData {
+  e164?: string;
+  formatted?: string;
+  canonical?: string;
+}
+
+export interface EnhancedPIIItem {
+  value: string;
+  pii_type: PIIType;
+  locale: Locale;
+  normalized?: NormalizedData;
+  sensitivity: SensitivityLevel;
+  confidence: number;
+  context?: string;
+  validators: string[];
+  dedupe_key: string;
+  source: string;
+  first_seen: string;
+  last_seen: string;
+  redaction_status: RedactionStatus;
+  retention_policy?: string;
+  legal_basis?: LegalBasis;
+  owner_team?: string;
+  access_policy_id?: string;
+}
 
 export interface Position {
   start: number;
@@ -66,6 +110,19 @@ export interface BasicSearchResponse {
   items: BasicSearchItem[];
   summary: ResultSummary;
   processingTime: number;
+}
+
+export interface EnhancedSearchResponse {
+  stage: 1;
+  method: 'enhanced_rule_based';
+  items: EnhancedPIIItem[];
+  summary: ResultSummary;
+  processingTime: number;
+  metadata: {
+    total_sensitivity_breakdown: Record<SensitivityLevel, number>;
+    validator_usage: Record<string, number>;
+    locale_breakdown: Record<string, number>;
+  };
 }
 
 export interface ProbabilitySearchResponse {

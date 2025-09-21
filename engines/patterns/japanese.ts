@@ -65,6 +65,55 @@ export const japanesePatterns: LanguagePatterns = {
       flags: 'g',
       description: 'Japanese dates (Western calendar)',
       examples: ['2023年12月25日', '2024年1月1日']
+    },
+    {
+      type: 'bank_account' as PIIType,
+      pattern: '\\b\\d{7,8}\\b',
+      flags: 'g',
+      description: 'Japanese bank account numbers',
+      examples: ['1234567', '12345678']
+    },
+    {
+      type: 'national_id' as PIIType,
+      pattern: '\\b\\d{12}\\b',
+      flags: 'g',
+      description: 'Japanese My Number (マイナンバー)',
+      examples: ['123456789012', '987654321098']
+    },
+    {
+      type: 'passport' as PIIType,
+      pattern: '[A-Z]{2}\\d{7}',
+      flags: 'g',
+      description: 'Japanese passport numbers',
+      examples: ['AB1234567', 'XY9876543']
+    },
+    {
+      type: 'coordinates' as PIIType,
+      pattern: '(?:緯度|lat|latitude)[:=]?\\s*[34]\\d\\.\\d+[°]?[\\s,]*(?:経度|lng|longitude)[:=]?\\s*1[23]\\d\\.\\d+[°]?',
+      flags: 'gi',
+      description: 'Japanese geographic coordinates',
+      examples: ['緯度: 35.6762, 経度: 139.6503', 'lat 34.6937, lng 135.5022']
+    },
+    {
+      type: 'date_of_birth' as PIIType,
+      pattern: '(?:生年月日|誕生日)[:=]?\\s*\\d{4}[年/-]\\d{1,2}[月/-]\\d{1,2}[日]?',
+      flags: 'gi',
+      description: 'Japanese date of birth',
+      examples: ['生年月日: 1990年3月15日', '誕生日 1985-12-25']
+    },
+    {
+      type: 'tax_id' as PIIType,
+      pattern: 'T\\d{13}',
+      flags: 'g',
+      description: 'Japanese corporate tax number (法人番号)',
+      examples: ['T1234567890123', 'T9876543210987']
+    },
+    {
+      type: 'swift_code' as PIIType,
+      pattern: '[A-Z]{4}JP[A-Z0-9]{2}(?:[A-Z0-9]{3})?',
+      flags: 'g',
+      description: 'Japanese bank SWIFT codes',
+      examples: ['BOTKJPJT', 'MUFGJPJT001']
     }
   ],
   contextRules: [

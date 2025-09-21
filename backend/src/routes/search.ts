@@ -143,6 +143,114 @@ router.post('/basic', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
+// Test enhanced format endpoint
+router.post('/test-enhanced', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { text, language = 'english' } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      throw createAPIError('Text is required and must be a string', 400);
+    }
+
+    // Use the actual rule-based engine to find patterns
+    const searchResult = ruleBasedEngine.search(text, [language as Language]);
+
+    // Transform basic results to enhanced format
+    const enhancedItems = searchResult.items.map(item => {
+      return ruleBasedEngine.createEnhancedPIIItem(
+        item.text,
+        item.type,
+        item.language,
+        0.90, // Standard confidence for rule-based matches
+        `file:test#enhanced`
+      );
+    });
+
+    const result = {
+      stage: 1,
+      method: 'enhanced_rule_based',
+      items: enhancedItems,
+      summary: {
+        totalItems: enhancedItems.length,
+        detectedItems: enhancedItems.length,
+        detectionRate: 100
+      },
+      processingTime: 5,
+      metadata: {
+        total_sensitivity_breakdown: enhancedItems.reduce((acc, item) => {
+          acc[item.sensitivity] = (acc[item.sensitivity] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        validator_usage: enhancedItems.reduce((acc, item) => {
+          item.validators.forEach(v => {
+            acc[v] = (acc[v] || 0) + 1;
+          });
+          return acc;
+        }, {} as Record<string, number>),
+        locale_breakdown: enhancedItems.reduce((acc, item) => {
+          const key = `${item.locale.country}-${item.locale.language}`;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      }
+    };
+
+    res.json({
+      success: true,
+      data: result,
+      metadata: {
+        requestId: req.headers['x-request-id'] || 'unknown',
+        timestamp: new Date().toISOString(),
+        apiVersion: '1.0.0',
+        note: 'Enhanced format test endpoint'
+      }
+    });
+
+  } catch (error) {
+    if ((error as any).statusCode) {
+      throw error;
+    } else {
+      throw createAPIError(`Enhanced test failed: ${(error as Error).message}`, 500);
+    }
+  }
+}));
+
+// Configuration reload endpoint - triggers pattern reload
+router.post('/reload-config', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    // Import configLoader and trigger reload
+    const { configLoader } = await import('../../../engines/utils/configLoader');
+    configLoader.reloadConfig();
+
+    // Get updated pattern counts using configLoader
+    const patternData = configLoader.getAllPatterns();
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Patterns configuration reloaded successfully',
+        languages: Object.keys(patternData).map(lang => {
+          const language = lang as Language;
+          const data = patternData[language];
+          return {
+            language: language,
+            patternCount: data.patterns.length,
+            contextRuleCount: data.contextRules?.length || 0
+          };
+        })
+      },
+      metadata: {
+        requestId: req.headers['x-request-id'] || 'unknown',
+        timestamp: new Date().toISOString(),
+        apiVersion: '1.0.0'
+      }
+    });
+
+  } catch (error) {
+    throw createAPIError(`Configuration reload failed: ${(error as Error).message}`, 500);
+  }
+}));
+
 router.post('/deep', asyncHandler(async (req: Request, res: Response) => {
   try {
     const searchRequest = validateSearchRequest(req.body);

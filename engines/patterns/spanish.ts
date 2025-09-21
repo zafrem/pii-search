@@ -65,6 +65,62 @@ export const spanishPatterns: LanguagePatterns = {
       flags: 'g',
       description: 'Spanish companies and organizations',
       examples: ['Telefónica S.A.', 'Banco Santander S.A.', 'Fundación BBVA']
+    },
+    {
+      type: 'bank_account' as PIIType,
+      pattern: 'ES\\d{2}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}\\s?\\d{4}',
+      flags: 'gi',
+      description: 'Spanish IBAN bank account numbers',
+      examples: ['ES91 2100 0418 4502 0005 1332', 'ES9121000418450200051332']
+    },
+    {
+      type: 'national_id' as PIIType,
+      pattern: '\\d{8}[A-Z]',
+      flags: 'g',
+      description: 'Spanish DNI (Documento Nacional de Identidad)',
+      examples: ['12345678A', '87654321B']
+    },
+    {
+      type: 'passport' as PIIType,
+      pattern: '[A-Z]{3}\\d{6}',
+      flags: 'g',
+      description: 'Spanish passport numbers',
+      examples: ['AAA123456', 'ZZZ987654']
+    },
+    {
+      type: 'coordinates' as PIIType,
+      pattern: '(?:latitud|lat|latitude)[:=]?\\s*[34]\\d\\.\\d+[°]?[\\s,]*(?:longitud|lng|longitude)[:=]?\\s*-?[0-5]\\.\\d+[°]?',
+      flags: 'gi',
+      description: 'Spanish geographic coordinates',
+      examples: ['latitud: 40.4168, longitud: -3.7038', 'lat 41.3851, lng 2.1734']
+    },
+    {
+      type: 'date_of_birth' as PIIType,
+      pattern: '(?:fecha de nacimiento|nacido|nacida)[:=]?\\s*\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}',
+      flags: 'gi',
+      description: 'Spanish date of birth',
+      examples: ['fecha de nacimiento: 15/03/1990', 'nacido 25-12-1985']
+    },
+    {
+      type: 'tax_id' as PIIType,
+      pattern: '[ABCDEFGHJNPQRSUVW]\\d{8}',
+      flags: 'g',
+      description: 'Spanish CIF (Corporate tax ID)',
+      examples: ['A12345674', 'B87654321']
+    },
+    {
+      type: 'swift_code' as PIIType,
+      pattern: '[A-Z]{4}ES[A-Z0-9]{2}(?:[A-Z0-9]{3})?',
+      flags: 'g',
+      description: 'Spanish bank SWIFT codes',
+      examples: ['BSCHESMM', 'CAIXESBB001']
+    },
+    {
+      type: 'credit_card' as PIIType,
+      pattern: '\\b(?:4\\d{3}|5[1-5]\\d{2}|6011|3[47]\\d{2})[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b',
+      flags: 'g',
+      description: 'Spanish credit card numbers',
+      examples: ['4111 1111 1111 1111', '5555-5555-5555-4444']
     }
   ],
   contextRules: [

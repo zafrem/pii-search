@@ -1,10 +1,14 @@
-import { 
-  BasicSearchItem, 
-  BasicSearchResponse, 
-  Language, 
+import {
+  BasicSearchItem,
+  BasicSearchResponse,
+  Language,
   PIIType,
   ResultSummary,
-  SearchRequest
+  SearchRequest,
+  EnhancedPIIItem,
+  SensitivityLevel,
+  Locale,
+  NormalizedData
 } from '../../backend/src/types';
 import { getPatternsByLanguages } from '../patterns';
 import { generateId } from '../utils/helpers';
@@ -122,6 +126,18 @@ export class RuleBasedEngine {
           return this.validateCreditCard(text);
         case 'ssn':
           return this.validateSSN(text);
+        case 'bank_account':
+          return this.validateBankAccount(text);
+        case 'iban':
+          return this.validateIBAN(text);
+        case 'coordinates':
+          return this.validateCoordinates(text);
+        case 'date_of_birth':
+          return this.validateDateOfBirth(text);
+        case 'national_id':
+        case 'passport':
+        case 'tax_id':
+          return this.validateIDNumber(text);
         default:
           // Basic validation for other types
           return text.trim().length > 0;
@@ -192,6 +208,142 @@ export class RuleBasedEngine {
     }
 
     return (sum % 10) === 0;
+  }
+
+  private validateBankAccount(account: string): boolean {
+    const cleaned = account.replace(/\D/g, '');
+    return cleaned.length >= 8 && cleaned.length <= 17;
+  }
+
+  private validateIBAN(iban: string): boolean {
+    const cleaned = iban.replace(/\s/g, '').toUpperCase();
+    if (cleaned.length < 15 || cleaned.length > 34) return false;
+
+    return /^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/.test(cleaned);
+  }
+
+  private validateCoordinates(coords: string): boolean {
+    const latLngRegex = /^-?([1-8]?\d(\.\d+)?|90(\.0+)?),\s*-?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/;
+    return latLngRegex.test(coords.trim());
+  }
+
+  private validateDateOfBirth(date: string): boolean {
+    const dateRegex = /^(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-](19|20)\d{2}$/;
+    return dateRegex.test(date);
+  }
+
+  private validateIDNumber(id: string): boolean {
+    const cleaned = id.replace(/\W/g, '');
+    return cleaned.length >= 6 && cleaned.length <= 20;
+  }
+
+  public createEnhancedPIIItem(
+    text: string,
+    type: PIIType,
+    language: Language,
+    confidence: number,
+    source: string = 'regex_pattern'
+  ): EnhancedPIIItem {
+    const now = new Date().toISOString();
+    const locale = this.getLocaleFromLanguage(language);
+    const normalized = this.normalizeValue(text, type);
+    const sensitivity = this.calculateSensitivity(type);
+    const validators = this.getValidators(type);
+    const dedupe_key = this.generateDedupeKey(text, type, normalized);
+
+    return {
+      value: text,
+      pii_type: type,
+      locale,
+      normalized,
+      sensitivity,
+      confidence,
+      context: undefined,
+      validators,
+      dedupe_key,
+      source,
+      first_seen: now,
+      last_seen: now,
+      redaction_status: 'raw',
+      retention_policy: 'P1Y',
+      legal_basis: 'legal_obligation',
+      owner_team: 'sec',
+      access_policy_id: sensitivity === 'High' ? 'pii-high' : 'pii-standard'
+    };
+  }
+
+  private getLocaleFromLanguage(language: Language): Locale {
+    const localeMap: Record<Language, Locale> = {
+      korean: { country: 'KR', language: 'ko', script: 'Kore' },
+      english: { country: 'US', language: 'en', script: 'Latn' },
+      chinese: { country: 'CN', language: 'zh', script: 'Hans' },
+      japanese: { country: 'JP', language: 'ja', script: 'Jpan' },
+      spanish: { country: 'ES', language: 'es', script: 'Latn' },
+      french: { country: 'FR', language: 'fr', script: 'Latn' }
+    };
+    return localeMap[language];
+  }
+
+  private normalizeValue(text: string, type: PIIType): NormalizedData | undefined {
+    switch (type) {
+      case 'phone':
+        return this.normalizePhone(text);
+      case 'email':
+        return { canonical: text.toLowerCase() };
+      case 'iban':
+        return { formatted: text.replace(/\s/g, '').toUpperCase() };
+      default:
+        return undefined;
+    }
+  }
+
+  private normalizePhone(phone: string): NormalizedData {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('010') && cleaned.length === 11) {
+      return { e164: `+82${cleaned.substring(1)}` };
+    }
+    if (cleaned.length === 10) {
+      return { e164: `+1${cleaned}` };
+    }
+    return { formatted: cleaned };
+  }
+
+  private calculateSensitivity(type: PIIType): SensitivityLevel {
+    const highSensitivity = ['ssn', 'credit_card', 'bank_account', 'passport', 'national_id', 'tax_id'];
+    const moderateSensitivity = ['phone', 'email', 'address', 'date_of_birth'];
+
+    if (highSensitivity.includes(type)) return 'High';
+    if (moderateSensitivity.includes(type)) return 'Moderate';
+    return 'Low';
+  }
+
+  private getValidators(type: PIIType): string[] {
+    const validatorMap: Record<PIIType, string[]> = {
+      phone: ['length', 'prefix', 'libphonenumber'],
+      email: ['format', 'domain'],
+      ssn: ['length', 'checksum'],
+      credit_card: ['luhn', 'length'],
+      bank_account: ['length', 'format'],
+      iban: ['checksum', 'country_code'],
+      coordinates: ['range', 'format'],
+      national_id: ['country_specific', 'length'],
+      passport: ['country_specific', 'format'],
+      tax_id: ['country_specific', 'format'],
+      date_of_birth: ['date_range', 'format'],
+      name: ['format'],
+      address: ['format'],
+      organization: ['format'],
+      date: ['format'],
+      id_number: ['format'],
+      postal_code: ['country_specific'],
+      swift_code: ['format', 'length']
+    };
+    return validatorMap[type] || ['format'];
+  }
+
+  private generateDedupeKey(text: string, type: PIIType, normalized?: NormalizedData): string {
+    const key = normalized?.e164 || normalized?.canonical || normalized?.formatted || text;
+    return `${type}:${key}`;
   }
 
   private deduplicateItems(items: BasicSearchItem[]): BasicSearchItem[] {
